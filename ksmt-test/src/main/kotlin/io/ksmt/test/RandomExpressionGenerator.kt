@@ -2,6 +2,7 @@ package io.ksmt.test
 
 import io.ksmt.KAst
 import io.ksmt.KContext
+import io.ksmt.expr.KBvExtractExpr
 import io.ksmt.expr.KExpr
 import io.ksmt.expr.KFpRoundingMode
 import io.ksmt.expr.KInterpretedValue
@@ -13,7 +14,6 @@ import io.ksmt.sort.KArraySortBase
 import io.ksmt.sort.KBoolSort
 import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KFp128Sort
-import io.ksmt.sort.KFp64Sort
 import io.ksmt.sort.KFpRoundingModeSort
 import io.ksmt.sort.KFpSort
 import io.ksmt.sort.KIntSort
@@ -38,7 +38,8 @@ import kotlin.reflect.KVisibility
 import kotlin.reflect.full.allSupertypes
 import kotlin.reflect.full.createType
 import kotlin.reflect.full.isSubclassOf
-
+import io.ksmt.test.RandomExpressionGenerator.Companion.AstFilter
+import io.ksmt.test.RandomExpressionGenerator.Companion.mkKExprSortProvider
 
 /**
  * Expression generation parameters.
@@ -72,7 +73,8 @@ data class GenerationParameters(
     val generatedListSize: IntRange = 2..10,
     val generatedStringLength: IntRange = 7..10,
     val possibleIntValues: IntRange = 3..100,
-    val possibleStringChars: CharRange = 'a'..'z'
+    val possibleStringChars: CharRange = 'a'..'z',
+    val astFilter: AstFilter = AstFilter()
 )
 
 class RandomExpressionGenerator {
@@ -96,12 +98,57 @@ class RandomExpressionGenerator {
             sortsAmountEstimation = 1000
         )
 
-        generateInitialSeed(samplesPerSort = params.seedExpressionsPerSort)
+        generateInitialSeed(
+            samplesPerSort = params.seedExpressionsPerSort,
+            sortGenerators = sortGenerators.filter { generatorFilter(it.function) }
+        )
 
         val filteredGenerators = generators.filter { generatorFilter(it.function) }
 
         while (generationContext.expressions.size < limit) {
             val generator = filteredGenerators.random(random)
+
+            nullIfGenerationFailed {
+                generator.generate(generationContext)
+            }
+        }
+
+        return generationContext.expressions
+    }
+
+    /**
+     * Specialized version of [generate] for weighted expression generation
+     * */
+    fun generate(
+        limit: Int,
+        context: KContext,
+        random: Random = Random(42),
+        params: GenerationParameters = GenerationParameters(),
+        generatorFilter: (KFunction<*>) -> Boolean = { true },
+        weights: Map<String, Double> = mapOf()
+    ): List<KExpr<*>> {
+        generationContext = GenerationContext(
+            random = random,
+            context = context,
+            params = params,
+            expressionsAmountEstimation = limit,
+            sortsAmountEstimation = 1000
+        )
+
+        generateInitialSeed(
+            samplesPerSort = params.seedExpressionsPerSort,
+            sortGenerators = sortGenerators.filter { generatorFilter(it.function) }
+        )
+
+        val filteredGenerators = generators.filter { generatorFilter(it.function) }
+        val sampler = WeightedSampler(
+            elements = filteredGenerators,
+            weights = filteredGenerators.map { weights.getOrDefault(it.function.name, 1.0) },
+            random = Random(random.nextInt())
+        )
+
+        while (generationContext.expressions.size < limit) {
+            val generator = sampler.sample()
 
             nullIfGenerationFailed {
                 generator.generate(generationContext)
@@ -152,16 +199,10 @@ class RandomExpressionGenerator {
             is SortArgument -> SortArgument(replayContext.sorts[argument.idx], argument.idx)
         }
 
-    private fun generateInitialSeed(samplesPerSort: Int) {
-        val (simpleGenerators, complexGenerators) = sortGenerators.partition { it.refSortProviders.isEmpty() }
-
-        for (sortGenerator in simpleGenerators) {
-            repeat(samplesPerSort) {
-                nullIfGenerationFailed { sortGenerator.mkSeed(generationContext) }
-            }
-        }
-        for (sortGenerator in complexGenerators) {
-            repeat(samplesPerSort) {
+    private fun generateInitialSeed(samplesPerSort: Int, sortGenerators: List<AstGenerator<SortArgument>>) {
+        for (sortGenerator in sortGenerators.sortedBy { it.refSortProviders.isNotEmpty() }) {
+            val prevSize = generationContext.expressions.size
+            while (generationContext.expressions.size - prevSize < samplesPerSort) {
                 nullIfGenerationFailed { sortGenerator.mkSeed(generationContext) }
             }
         }
@@ -241,6 +282,16 @@ class RandomExpressionGenerator {
                 it.function.match("mkArraySort", KSort::class, KSort::class)
             }
         }
+        private val array2SortGen by lazy {
+            sortGenerators.single {
+                it.function.match("mkArraySort", KSort::class, KSort::class, KSort::class)
+            }
+        }
+        private val array3SortGen by lazy {
+            sortGenerators.single {
+                it.function.match("mkArraySort", KSort::class, KSort::class, KSort::class, KSort::class)
+            }
+        }
 
         private fun KType.isSubclassOf(other: KClass<*>): Boolean =
             when (val cls = classifier) {
@@ -274,7 +325,7 @@ class RandomExpressionGenerator {
             }
 
             val argumentProviders = valueParams.map {
-                it.mkArgProvider(typeParametersProviders) ?: return null
+                it.mkArgProvider(typeParametersProviders, name) ?: return null
             }
 
             return AstGenerator<Argument>(this, typeParametersProviders, argumentProviders) { args ->
@@ -324,9 +375,9 @@ class RandomExpressionGenerator {
             return true
         }
 
-        private fun KParameter.mkArgProvider(typeParametersProviders: MutableMap<String, SortProvider>): ArgumentProvider? {
+        private fun KParameter.mkArgProvider(typeParametersProviders: MutableMap<String, SortProvider>, functionName: String): ArgumentProvider? {
             if (type.isKExpr()) {
-                val sortProvider = type.mkKExprSortProvider(typeParametersProviders)
+                val sortProvider = type.mkKExprSortProvider(typeParametersProviders, functionName)
                 return if (type.isConst()) {
                     ConstExprProvider(sortProvider)
                 } else {
@@ -341,7 +392,7 @@ class RandomExpressionGenerator {
             if (type.isSubclassOf(List::class)) {
                 val elementType = type.arguments.single().type ?: return null
                 if (!elementType.isKExpr()) return null
-                val sortProvider = elementType.mkKExprSortProvider(typeParametersProviders)
+                val sortProvider = elementType.mkKExprSortProvider(typeParametersProviders, functionName)
                 return ListProvider(sortProvider)
             }
 
@@ -367,7 +418,8 @@ class RandomExpressionGenerator {
             references[name] = sortProvider
         }
 
-        private fun KType.mkKExprSortProvider(references: MutableMap<String, SortProvider>): SortProvider {
+        private fun KType.mkKExprSortProvider(references: MutableMap<String, SortProvider>, functionName: String): SortProvider {
+            if (functionName == "mkArrayConst") return ArrayConstValueSortProvider
             val expr = findKExprType()
             val sort = expr.arguments.single()
             if (sort == KTypeProjection.STAR) return SingleSortProvider(KSort::class.java)
@@ -391,12 +443,18 @@ class RandomExpressionGenerator {
                 return ReferenceSortProvider(sortClass.name)
             }
 
-            if (this.isSubclassOf(KArraySort::class)) {
-                val (domain, range) = arguments.map {
-                    it.type?.mkSortProvider(references)
-                        ?: generationFailed("Array sort type is not available")
+            if (this.isSubclassOf(KArraySortBase::class)) {
+                val sortProviders = arguments.map {
+                    it.type?.mkSortProvider(references) ?: generationFailed("Array sort type is not available")
                 }
-                return ArraySortProvider(domain, range)
+                when {
+                    this.isSubclassOf(KArraySort::class) ->
+                        return ArraySortProvider(sortProviders[0], sortProviders[1])
+                    this.isSubclassOf(KArray2Sort::class) ->
+                        return Array2SortProvider(sortProviders[0], sortProviders[1], sortProviders[2])
+                    this.isSubclassOf(KArray3Sort::class) ->
+                        return Array3SortProvider(sortProviders[0], sortProviders[1], sortProviders[2], sortProviders[3])
+                }
             }
 
             if (this.isKSort() && sortClass != null) {
@@ -497,13 +555,35 @@ class RandomExpressionGenerator {
             }
         }
 
+        private object ArrayConstValueSortProvider : SortProvider {
+            override fun resolve(generationContext: GenerationContext, references: Map<String, SortArgument>): SortArgument {
+                val arraySortArgument  = references["A"] ?: generationFailed("Unresolved sort reference $references")
+                val arraySort = arraySortArgument.value as KArraySortBase<*>
+
+                return SortArgument(arraySort.range, generationContext.findSortIdx(arraySort.range))
+            }
+        }
+
         private class ReferenceSortProvider(val reference: String) : SortProvider {
             override fun resolve(generationContext: GenerationContext, references: Map<String, SortArgument>): SortArgument {
                 return references[reference] ?: generationFailed("Unresolved sort reference $references")
             }
         }
 
-        private class ArraySortProvider(val domain: SortProvider, val range: SortProvider) : SortProvider {
+        private abstract class ArraySortProviderBase : SortProvider {
+            protected fun resolve(
+                generator: AstGenerator<SortArgument>,
+                generationContext: GenerationContext,
+                references: Map<String, SortArgument>
+            ): SortArgument {
+                val expr = generator.mkSeed(generationContext, references)
+                val sort = expr.value.sort
+                val sortIdx = generationContext.findSortIdx(sort)
+                return SortArgument(generationContext.sorts[sortIdx], sortIdx)
+            }
+        }
+
+        private class ArraySortProvider(val domain: SortProvider, val range: SortProvider) : ArraySortProviderBase() {
             override fun resolve(generationContext: GenerationContext, references: Map<String, SortArgument>): SortArgument {
                 val generationParams = mapOf(
                     "D" to domain,
@@ -514,10 +594,49 @@ class RandomExpressionGenerator {
                     generationParams,
                     generationParams.keys.map { ReferenceSortProvider(it) }
                 )
-                val expr = generator.mkSeed(generationContext, references)
-                val sort = expr.value.sort
-                val sortIdx = generationContext.findSortIdx(sort)
-                return SortArgument(generationContext.sorts[sortIdx], sortIdx)
+                return resolve(generator, generationContext, references)
+            }
+        }
+
+        private class Array2SortProvider(
+            val d0: SortProvider,
+            val d1: SortProvider,
+            val range: SortProvider
+        ) : ArraySortProviderBase() {
+            override fun resolve(generationContext: GenerationContext, references: Map<String, SortArgument>): SortArgument {
+                val generationParams = mapOf(
+                    "D0" to d0,
+                    "D1" to d1,
+                    "R" to range
+                )
+                val generator = AstGenerator<SortArgument>(
+                    array2SortGen.function,
+                    generationParams,
+                    generationParams.keys.map { ReferenceSortProvider(it) }
+                )
+                return resolve(generator, generationContext, references)
+            }
+        }
+
+        private class Array3SortProvider(
+            val d0: SortProvider,
+            val d1: SortProvider,
+            val d2: SortProvider,
+            val range: SortProvider
+        ) : ArraySortProviderBase() {
+            override fun resolve(generationContext: GenerationContext, references: Map<String, SortArgument>): SortArgument {
+                val generationParams = mapOf(
+                    "D0" to d0,
+                    "D1" to d1,
+                    "D2" to d2,
+                    "R" to range
+                )
+                val generator = AstGenerator<SortArgument>(
+                    array3SortGen.function,
+                    generationParams,
+                    generationParams.keys.map { ReferenceSortProvider(it) }
+                )
+                return resolve(generator, generationContext, references)
             }
         }
 
@@ -599,6 +718,9 @@ class RandomExpressionGenerator {
                     if (!ast.isCorrect()) {
                         generationFailed("Incorrect ast generated")
                     }
+                    if (!generationContext.params.astFilter.filterExpr(ast)) {
+                        generationFailed("Expr is filtered")
+                    }
                     val depth = (arguments.maxOfOrNull { it.depth } ?: 0) + 1
                     val idx = generationContext.registerExpr(ast, depth)
                     generationContext.trace += invocation
@@ -606,6 +728,9 @@ class RandomExpressionGenerator {
                 }
 
                 if (ast is KSort) {
+                    if (!generationContext.params.astFilter.filterSort(ast)) {
+                        generationFailed("Sort is filtered")
+                    }
                     var idx = generationContext.registerSort(ast)
                     if (idx == -1) {
                         idx = generationContext.findSortIdx(ast)
@@ -620,6 +745,7 @@ class RandomExpressionGenerator {
             private fun KExpr<*>.isCorrect(): Boolean {
                 val sort = sort
                 if (sort is KBvSort && sort.sizeBits == 0u) return false
+                if (this is KBvExtractExpr && high >= value.sort.sizeBits.toLong()) return false
                 return true
             }
         }
@@ -754,7 +880,29 @@ class RandomExpressionGenerator {
             fun findSortIdx(sort: KSort): Int =
                 registeredSorts[sort] ?: generationFailed("No idx for sort $sort")
         }
+
+        open class AstFilter {
+            open fun filterSort(sort: KSort) = true
+            open fun filterExpr(expr: KExpr<*>) = true
+        }
     }
+}
+
+private class WeightedSampler<T>(
+    elements: List<T>,
+    weights: List<Double>,
+    val random: Random
+) {
+    val data: ArrayList<T> = ArrayList(elements)
+    val prefixSum: ArrayList<Double> = ArrayList(weights.scan(0.0) { acc, w -> acc + w }.drop(1))
+
+    fun sample(): T {
+        val randomValue = random.nextDouble(0.0, prefixSum.last())
+        val idx = prefixSum.binarySearch(randomValue).let { if (it >= 0) it else -it - 1 }
+
+        return data[idx]
+    }
+
 }
 
 @Suppress("SwallowedException")

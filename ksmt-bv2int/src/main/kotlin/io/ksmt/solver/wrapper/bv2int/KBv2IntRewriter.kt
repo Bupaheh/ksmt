@@ -104,10 +104,10 @@ import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KFpSort
 import io.ksmt.sort.KIntSort
 import io.ksmt.sort.KSort
-import io.ksmt.utils.mkConst
 import io.ksmt.utils.normalizeValue
 import io.ksmt.utils.toBigInteger
 import io.ksmt.utils.uncheckedCast
+import kotlin.math.max
 
 @Suppress("LargeClass")
 class KBv2IntRewriter(
@@ -120,20 +120,39 @@ class KBv2IntRewriter(
     }
 
     private val powerOfTwoFunc = with(ctx) { mkFreshFuncDecl("pow2", intSort, listOf(intSort)) }
-    private var powerOfTwoMaxArg = -1L
+    private val powerOfTwoMaxArg = hashMapOf<KExpr<*>, Long>()
 
     private val lemmas = hashMapOf<KExpr<*>, KExpr<KBoolSort>>()
+    private val declarations = hashMapOf<KDecl<*>, KDecl<*>>()
 
     fun rewriteBv2Int(expr: KExpr<KBoolSort>): KExpr<KBoolSort> = with(ctx) {
-        powerOfTwoMaxArg = -1L
-
         val transformedExpr = apply(expr)
 
-        for (pow in 0L..powerOfTwoMaxArg) {
+        for (pow in 0L..transformedExpr.getPowerOfTwoMaxArg()) {
             transformedExpr.addLemma(mkPowerOfTwoApp(pow.expr) eq mkPowerOfTwoExpr(pow.toUInt()))
         }
 
         mkAnd(transformedExpr, transformedExpr.getLemma(), flat = false)
+    }
+
+    fun rewriteDecl(decl: KDecl<*>): KDecl<KSort> = with(ctx) {
+        mkFuncDecl(
+            decl.name,
+            decl.sort.tryRewriteSort(),
+            decl.argSorts.map { it.tryRewriteSort() }
+        ).also { declarations[it] = decl }
+    }
+
+    fun cachedDecl(decl: KDecl<*>): KDecl<KSort>? = declarations[decl].uncheckedCast()
+
+    fun isAuxDecl(decl: KDecl<*>): Boolean = decl == powerOfTwoFunc
+
+    private fun KExpr<*>.getPowerOfTwoMaxArg() = powerOfTwoMaxArg.getOrDefault(tryUnwrap(), -1L)
+
+    private fun <T : KSort> KExpr<T>.updatePowerOfTwoMaxArg(value: Long): KExpr<T> {
+        powerOfTwoMaxArg[tryUnwrap()] = max(tryUnwrap().getPowerOfTwoMaxArg(), value)
+
+        return this
     }
 
     private fun <T : KSort> KExpr<T>.addLemma(lemma: KExpr<KBoolSort>): KExpr<T> {
@@ -144,27 +163,18 @@ class KBv2IntRewriter(
     private fun KExpr<*>.getLemma() = lemmas.getOrDefault(tryUnwrap(), ctx.trueExpr)
 
     override fun <T : KSort, A : KSort> transformApp(expr: KApp<T, A>): KExpr<T> {
-        expr.args.forEach { expr.addLemma(it.getLemma()) }
-        return expr
+        return expr.distributeDependencies(expr.args)
     }
 
     override fun <T : KSort> transform(expr: KConst<T>): KExpr<T> =
         transformExprAfterTransformedBv2Int(expr) {
-            val sort = expr.sort
-
-            sort.tryRewriteSort()
-                .mkConst(expr.decl.name)
-                .tryAddBoundLemmas(sort)
+            rewriteDecl(expr.decl).apply(listOf()).tryAddBoundLemmas(expr.sort)
         }
 
 
     override fun <T : KSort> transform(expr: KFunctionApp<T>): KExpr<T> = with(ctx) {
         transformExprAfterTransformedBv2Int(expr, expr.args) { args ->
-            val decl = expr.decl.let { decl ->
-                mkFuncDecl(decl.name, decl.sort.tryRewriteSort(), decl.argSorts.map { it.tryRewriteSort() })
-            }
-
-            decl.apply(args).tryAddBoundLemmas(expr.sort)
+            rewriteDecl(expr.decl).apply(args).tryAddBoundLemmas(expr.sort)
         }
     }
 
@@ -224,7 +234,7 @@ class KBv2IntRewriter(
             preprocessMode = WrapMode.DENORMALIZE,
             postRewriteMode = WrapMode.DENORMALIZE
         ) { arg: KExpr<KIntSort> ->
-            arg - 1.expr
+            -arg - 1.expr
         }
     }
 
@@ -392,7 +402,11 @@ class KBv2IntRewriter(
 
             mkIte(
                 condition = arg1 eq 0.expr,
-                trueBranch = mkPowerOfTwoExpr(expr.sort.sizeBits) - 1.expr,
+                trueBranch = mkIte(
+                    condition = signedArg0 ge 0.expr,
+                    trueBranch = mkPowerOfTwoExpr(expr.sort.sizeBits) - 1.expr,
+                    falseBranch = 1.expr
+                ),
                 falseBranch = signedToUnsigned(signedRes, sizeBits)
             )
         }
@@ -403,9 +417,8 @@ class KBv2IntRewriter(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
-            preprocessMode = WrapMode.NONE
-        ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
-            mkIte(arg1.normalized eq 0.expr, arg0.normalized, arg0.denormalized mod arg1.normalized)
+        ) { arg0: KExpr<KIntSort>, arg1: KExpr<KIntSort> ->
+            mkIte(arg1 eq 0.expr, arg0, arg0 mod arg1)
         }
     }
 
@@ -562,7 +575,7 @@ class KBv2IntRewriter(
             dependency = expr.value,
             preprocessMode = WrapMode.DENORMALIZE,
             postRewriteMode = WrapMode.DENORMALIZE
-        ) { value: KBv2IntAuxExpr ->
+        ) { value: KExpr<KIntSort> ->
             value / mkPowerOfTwoExpr(expr.low.toUInt())
         }
     }
@@ -582,7 +595,7 @@ class KBv2IntRewriter(
         transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency = expr.value,
-            preprocessMode = WrapMode.DENORMALIZE,
+            preprocessMode = WrapMode.NORMALIZE,
             postRewriteMode = WrapMode.DENORMALIZE
         ) { value: KExpr<KIntSort> ->
             value
@@ -594,8 +607,8 @@ class KBv2IntRewriter(
 
             var currentValue = value
 
-            for (i in 1..expr.repeatNumber) {
-                currentValue = value * mkPowerOfTwoExpr(expr.value.sort.sizeBits * i.toUInt()) + currentValue
+            for (i in 1 until expr.repeatNumber) {
+                currentValue += value * mkPowerOfTwoExpr(expr.value.sort.sizeBits * i.toUInt())
             }
 
             currentValue
@@ -607,17 +620,23 @@ class KBv2IntRewriter(
             expr,
             expr.arg,
             expr.shift,
-            WrapMode.DENORMALIZE,
+            WrapMode.NONE,
             WrapMode.DENORMALIZE
-        ) { arg: KExpr<KIntSort>, shift: KExpr<KIntSort> ->
+        ) { arg: KBv2IntAuxExpr, shift: KBv2IntAuxExpr ->
             val sizeBits = expr.sort.sizeBits
-            powerOfTwoMaxArg = sizeBits.toLong() - 1L
+
+//            (0u until sizeBits).fold(0.expr as KExpr<KIntSort>){ base, pow ->
+//                mkIte(shift.normalized eq pow.toInt().expr,
+//                    arg.denormalized * mkPowerOfTwoExpr(pow),
+//                    base
+//                    )
+//            }
 
             mkIte(
-                condition = shift ge sizeBits.toLong().expr,
+                condition = shift.normalized ge sizeBits.toLong().expr,
                 trueBranch = 0.expr,
-                falseBranch = arg * mkPowerOfTwoApp(shift)
-            )
+                falseBranch = arg.denormalized * mkPowerOfTwoApp(shift.normalized)
+            ).updatePowerOfTwoMaxArg(sizeBits.toLong() - 1)
         }
     }
 
@@ -628,13 +647,12 @@ class KBv2IntRewriter(
             expr.shift
         ) { arg: KExpr<KIntSort>, shift: KExpr<KIntSort> ->
             val sizeBits = expr.sort.sizeBits
-            powerOfTwoMaxArg = sizeBits.toLong() - 1L
 
             mkIte(
                 condition = shift ge sizeBits.toLong().expr,
                 trueBranch = 0.expr,
                 falseBranch = arg / mkPowerOfTwoApp(shift)
-            )
+            ).updatePowerOfTwoMaxArg(sizeBits.toLong() - 1)
         }
     }
 
@@ -654,13 +672,11 @@ class KBv2IntRewriter(
                 falseBranch = onesHigherBits + arg / mkPowerOfTwoApp(shift)
             )
 
-            powerOfTwoMaxArg = sizeBits.toLong() - 1L
-
             mkIte(
                 condition = shift ge sizeBits.toLong().expr,
-                trueBranch = 0.expr,
+                trueBranch = mkIte(signCondition, 0.expr, mkPowerOfTwoExpr(sizeBits) - 1.expr),
                 falseBranch = result
-            )
+            ).updatePowerOfTwoMaxArg(sizeBits.toLong() - 1)
         }
     }
 
@@ -674,13 +690,11 @@ class KBv2IntRewriter(
         ) { value: KBv2IntAuxExpr, rotation: KBv2IntAuxExpr ->
             val sizeBits = expr.sort.sizeBits
             val sizeBitsLong = sizeBits.toLong()
-            val normalizedRotation = unsignedToSigned(rotation.normalized, sizeBits) mod sizeBitsLong.expr
+            val normalizedRotation = rotation.normalized mod sizeBitsLong.expr
             val higherBits = value.denormalized * mkPowerOfTwoApp(normalizedRotation)
             val lowerBits = value.normalized / mkPowerOfTwoApp(sizeBitsLong.expr - normalizedRotation)
 
-            powerOfTwoMaxArg = sizeBits.toLong()
-
-            higherBits + lowerBits
+            (higherBits + lowerBits).updatePowerOfTwoMaxArg(sizeBits.toLong())
         }
     }
 
@@ -711,13 +725,11 @@ class KBv2IntRewriter(
         ) { value: KBv2IntAuxExpr, rotation: KBv2IntAuxExpr ->
             val sizeBits = expr.sort.sizeBits
             val sizeBitsLong = sizeBits.toLong()
-            val normalizedRotation = unsignedToSigned(rotation.normalized, sizeBits) mod sizeBitsLong.expr
+            val normalizedRotation = rotation.normalized mod sizeBitsLong.expr
             val lowerBits = value.normalized / mkPowerOfTwoApp(normalizedRotation)
             val higherBits = value.denormalized * mkPowerOfTwoApp(sizeBitsLong.expr - normalizedRotation)
 
-            powerOfTwoMaxArg = sizeBits.toLong()
-
-            higherBits + lowerBits
+            (higherBits + lowerBits).updatePowerOfTwoMaxArg(sizeBits.toLong())
         }
     }
 
@@ -803,9 +815,17 @@ class KBv2IntRewriter(
             expr.arg1
         ) { arg0: KExpr<KIntSort>, arg1: KExpr<KIntSort> ->
             val sizeBits = expr.arg0.sort.sizeBits
-            val minValue = -mkPowerOfTwoExpr(expr.arg0.sort.sizeBits - 1u)
+            val minValue = if (expr.isSigned) {
+                -mkPowerOfTwoExpr(expr.arg0.sort.sizeBits - 1u)
+            } else {
+                0.expr
+            }
 
-            unsignedToSigned(arg0, sizeBits) - unsignedToSigned(arg1, sizeBits) ge minValue
+            if (!expr.isSigned) {
+                arg0 - arg1 ge minValue
+            } else {
+                unsignedToSigned(arg0, sizeBits) - unsignedToSigned(arg1, sizeBits) ge minValue
+            }
         }
     }
 
@@ -1025,7 +1045,9 @@ class KBv2IntRewriter(
         expr: T,
         constructor: (KExpr<KBoolSort>, List<KDecl<*>>) -> KExpr<KBoolSort>
     ): KExpr<KBoolSort> = transformExprAfterTransformed(expr, expr.body) { body ->
-        QuantifierLemmaDistributor(body, expr.bounds).distributeLemmas(constructor)
+        QuantifierLemmaDistributor(body, expr.bounds)
+            .distributeLemmas(constructor)
+            .updatePowerOfTwoMaxArg(body.getPowerOfTwoMaxArg())
     }
 
     private fun mkPowerOfTwoApp(power: KExpr<KIntSort>): KExpr<KIntSort> = powerOfTwoFunc.apply(listOf(power))
@@ -1077,6 +1099,15 @@ class KBv2IntRewriter(
         }.uncheckedCast()
     }
 
+    private fun <T : KSort> KExpr<T>.distributeDependencies(args: List<KExpr<*>>): KExpr<T> {
+        if (args.isEmpty()) return this
+
+        args.forEach { addLemma(it.getLemma()) }
+        updatePowerOfTwoMaxArg(args.maxOf { it.getPowerOfTwoMaxArg() })
+
+        return this
+    }
+
     private inline fun <T : KSort> transformExprAfterTransformedBv2Int(
         expr: KExpr<T>,
         postRewriteMode: WrapMode = WrapMode.NORMALIZE,
@@ -1091,7 +1122,7 @@ class KBv2IntRewriter(
         transformer: (B) -> KExpr<*>
     ): KExpr<T> = transformExprAfterTransformed(expr, dependency) { arg ->
         transformer(arg.preprocessArg(preprocessMode).uncheckedCast())
-            .addLemma(arg.getLemma())
+            .distributeDependencies(listOf(arg))
             .postRewriteResult(postRewriteMode, expr.sort)
     }
 
@@ -1104,12 +1135,13 @@ class KBv2IntRewriter(
         postRewriteMode: WrapMode = WrapMode.NORMALIZE,
         transformer: (B0, B1) -> KExpr<*>
     ): KExpr<T> = transformExprAfterTransformed(expr, dependency0, dependency1) { arg0, arg1 ->
-        transformer(
+        val t1 = transformer(
             arg0.preprocessArg(preprocessMode).uncheckedCast(),
             arg1.preprocessArg(preprocessMode).uncheckedCast()
-        ).addLemma(arg0.getLemma())
-            .addLemma(arg1.getLemma())
-            .postRewriteResult(postRewriteMode, expr.sort)
+        )
+        t1.distributeDependencies(listOf(arg0, arg1))
+
+        t1.postRewriteResult(postRewriteMode, expr.sort)
     }
 
     @Suppress("LongParameterList")
@@ -1126,9 +1158,7 @@ class KBv2IntRewriter(
             arg0.preprocessArg(preprocessMode).uncheckedCast(),
             arg1.preprocessArg(preprocessMode).uncheckedCast(),
             arg2.preprocessArg(preprocessMode).uncheckedCast()
-        ).addLemma(arg0.getLemma())
-            .addLemma(arg1.getLemma())
-            .addLemma(arg2.getLemma())
+        ).distributeDependencies(listOf(arg0, arg1, arg2))
             .postRewriteResult(postRewriteMode, expr.sort)
     }
 
@@ -1160,10 +1190,7 @@ class KBv2IntRewriter(
             arg1.preprocessArg(preprocessMode).uncheckedCast(),
             arg2.preprocessArg(preprocessMode).uncheckedCast(),
             arg3.preprocessArg(preprocessMode).uncheckedCast()
-        ).addLemma(arg0.getLemma())
-            .addLemma(arg1.getLemma())
-            .addLemma(arg2.getLemma())
-            .addLemma(arg3.getLemma())
+        ).distributeDependencies(listOf(arg0, arg1, arg2, arg3))
             .postRewriteResult(postRewriteMode, expr.sort)
     }
 
@@ -1199,11 +1226,7 @@ class KBv2IntRewriter(
             arg2.preprocessArg(preprocessMode).uncheckedCast(),
             arg3.preprocessArg(preprocessMode).uncheckedCast(),
             arg4.preprocessArg(preprocessMode).uncheckedCast()
-        ).addLemma(arg0.getLemma())
-            .addLemma(arg1.getLemma())
-            .addLemma(arg2.getLemma())
-            .addLemma(arg3.getLemma())
-            .addLemma(arg4.getLemma())
+        ).distributeDependencies(listOf(arg0, arg1, arg2, arg3, arg4))
             .postRewriteResult(postRewriteMode, expr.sort)
     }
 
@@ -1214,9 +1237,9 @@ class KBv2IntRewriter(
         postRewriteMode: WrapMode = WrapMode.NORMALIZE,
         transformer: (List<KExpr<KSort>>) -> KExpr<*>
     ): KExpr<T> = transformExprAfterTransformed(expr, dependencies) { args ->
-        transformer(args.map { it.preprocessArg(preprocessMode) }.uncheckedCast()).apply {
-            args.forEach { addLemma(it.getLemma()) }
-        }.postRewriteResult(postRewriteMode, expr.sort)
+        transformer(args.map { it.preprocessArg(preprocessMode) }.uncheckedCast())
+            .distributeDependencies(args)
+            .postRewriteResult(postRewriteMode, expr.sort)
     }
 
     private fun <T : KSort> KExpr<T>.tryUnwrap(): KExpr<T> =
