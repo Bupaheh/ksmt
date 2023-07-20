@@ -11,6 +11,8 @@ dependencies {
     implementation(project(":ksmt-core"))
     implementation(project(":ksmt-z3"))
     implementation(project(":ksmt-cvc5"))
+    implementation(project(":ksmt-runner"))
+    testImplementation(project(mapOf("path" to ":ksmt-test")))
 }
 
 publishing {
