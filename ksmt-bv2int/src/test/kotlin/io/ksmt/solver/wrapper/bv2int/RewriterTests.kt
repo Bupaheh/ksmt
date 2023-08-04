@@ -12,7 +12,6 @@ import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.sort.KBoolSort
 import io.ksmt.sort.KSort
 import io.ksmt.test.GenerationParameters
-import io.ksmt.test.RandomExpressionGenerator
 import io.ksmt.utils.uncheckedCast
 import kotlin.random.Random
 import kotlin.test.Test
@@ -27,11 +26,11 @@ class RewriterTests {
             this
         }.uncheckedCast()
 
-    private fun KContext.testInt2BvModelConversion(exprs: List<KExpr<KBoolSort>>) {
+    private fun KContext.testInt2BvModelConversion(exprs: List<KExpr<KBoolSort>>, mode: KBv2IntRewriter.AndRewriteMode) {
         var satCnt = 0
         var timeoutCnt = 0
 
-        val rewriter = KBv2IntRewriter(this, KBv2IntRewriter.RewriteMode.SUM)
+        val rewriter = KBv2IntRewriter(this, KBv2IntRewriter.RewriteMode.EAGER, mode)
 
         KSolverRunnerManager().use { solverManager ->
             exprs.forEachIndexed { i, expr ->
@@ -54,8 +53,9 @@ class RewriterTests {
                     satCnt++
 
                     val model = KBv2IntModel(this, solver.model(), rewriter)
+                    val simplified =  model.eval(expr, true)
 
-                    assert(model.eval(expr, true) == trueExpr)
+                    assert(simplified == trueExpr)
                 }
             }
         }
@@ -64,11 +64,11 @@ class RewriterTests {
         println("${timeoutCnt.toDouble() / exprs.size} timeout percentage")
     }
 
-    private fun KContext.testBv2IntModelConversion(exprs: List<KExpr<KBoolSort>>) {
+    private fun KContext.testBv2IntModelConversion(exprs: List<KExpr<KBoolSort>>, mode: KBv2IntRewriter.AndRewriteMode) {
         var satCnt = 0
         var timeoutCnt = 0
 
-        val rewriter = KBv2IntRewriter(this, KBv2IntRewriter.RewriteMode.SUM)
+        val rewriter = KBv2IntRewriter(this, KBv2IntRewriter.RewriteMode.EAGER, mode)
 
         KSolverRunnerManager().use { solverManager ->
             exprs.forEachIndexed { i, expr ->
@@ -130,23 +130,6 @@ class RewriterTests {
         println("${timeoutCnt.toDouble() / exprs.size} timeout percentage")
     }
 
-    private fun KContext.generateRandomExpressions(
-        size: Int,
-        batchSize: Int,
-        params: GenerationParameters,
-        random: Random,
-        weights: Map<String, Double> = mapOf()
-    ): List<KExpr<KBoolSort>> = List(size) {
-        RandomExpressionGenerator().generate(
-            batchSize,
-            this,
-            params = params,
-            random = random,
-            generatorFilter = ::bv2IntBenchmarkGeneratorFilter,
-            weights = weights
-        ).last { it.sort is KBoolSort }
-    }.uncheckedCast()
-
     private fun KExpr<*>.depth(): Int {
         val expr = this
 
@@ -160,47 +143,53 @@ class RewriterTests {
     @Test
     fun testInt2BvModelConversion() = with(KContext(simplificationMode = KContext.SimplificationMode.NO_SIMPLIFY)) {
         val params = GenerationParameters(
-            seedExpressionsPerSort = 10,
-            possibleIntValues = 2..32,
+            seedExpressionsPerSort = 20,
+            possibleIntValues = 2..64,
             deepExpressionProbability = 0.2,
             generatedListSize = 2..3,
             astFilter = Bv2IntAstFilter()
         )
         val weights = Bv2IntBenchmarkWeightBuilder()
-            .enableArray(100.0)
+            .enableBvCmp(5.0)
+            .enableBvLia(10.0)
+            .enableBvBitwise(2.0)
             .build()
         val expressions = generateRandomExpressions(
-            size = 2000,
-            batchSize = 400,
+            size = 1000,
+            batchSize = 500,
             params = params,
-            random = Random(3),
-            weights = weights
+            random = Random(1),
+            weights = weights,
+            isVerbose = true
         )
 
-        testInt2BvModelConversion(expressions)
+        testInt2BvModelConversion(expressions, KBv2IntRewriter.AndRewriteMode.BITWISE)
     }
 
     @Test
     fun testBv2IntModelConversion() = with(KContext(simplificationMode = KContext.SimplificationMode.NO_SIMPLIFY)) {
         val params = GenerationParameters(
-            seedExpressionsPerSort = 10,
-            possibleIntValues = 2..32,
+            seedExpressionsPerSort = 20,
+            possibleIntValues = 2..64,
             deepExpressionProbability = 0.2,
             generatedListSize = 2..3,
             astFilter = Bv2IntAstFilter()
         )
         val weights = Bv2IntBenchmarkWeightBuilder()
-            .enableArray(100.0)
+            .enableBvCmp(5.0)
+            .enableBvLia(10.0)
+            .enableBvBitwise(2.0)
             .build()
         val expressions = generateRandomExpressions(
-            size = 5000,
+            size = 1000,
             batchSize = 500,
             params = params,
-            random = Random(3),
-            weights = weights
+            random = Random(22),
+            weights = weights,
+            isVerbose = true
         )
 
-        testBv2IntModelConversion(expressions)
+        testBv2IntModelConversion(expressions, KBv2IntRewriter.AndRewriteMode.BITWISE)
     }
 
 }

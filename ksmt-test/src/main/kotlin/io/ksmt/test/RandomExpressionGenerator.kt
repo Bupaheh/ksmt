@@ -39,7 +39,9 @@ import kotlin.reflect.full.allSupertypes
 import kotlin.reflect.full.createType
 import kotlin.reflect.full.isSubclassOf
 import io.ksmt.test.RandomExpressionGenerator.Companion.AstFilter
+import io.ksmt.test.RandomExpressionGenerator.Companion.isKSort
 import io.ksmt.test.RandomExpressionGenerator.Companion.mkKExprSortProvider
+import io.ksmt.test.RandomExpressionGenerator.Companion.mkSortProvider
 
 /**
  * Expression generation parameters.
@@ -321,7 +323,11 @@ class RandomExpressionGenerator {
 
             val typeParametersProviders = hashMapOf<String, SortProvider>()
             typeParameters.forEach {
-                it.mkReferenceSortProvider(typeParametersProviders)
+                if (name == "mkArraySelect" || name == "mkArrayStore") {
+                    it.mkArrayReferenceSortProvider(typeParametersProviders)
+                } else {
+                    it.mkReferenceSortProvider(typeParametersProviders)
+                }
             }
 
             val argumentProviders = valueParams.map {
@@ -416,6 +422,16 @@ class RandomExpressionGenerator {
                 generationFailed("Not a KSort type argument")
             }
             references[name] = sortProvider
+        }
+
+        private fun KTypeParameter.mkArrayReferenceSortProvider(references: MutableMap<String, SortProvider>) {
+            if (upperBounds.size == 1 && upperBounds.single().isKSort()) {
+                val sortClass = upperBounds.single().classifier ?: generationFailed("Null classifier")
+
+                references[name] = NotArraySortProvider((sortClass.uncheckedCast<KClassifier, KClass<KSort>>()).java)
+            } else {
+                generationFailed("Not a KSort type argument")
+            }
         }
 
         private fun KType.mkKExprSortProvider(references: MutableMap<String, SortProvider>, functionName: String): SortProvider {
@@ -551,6 +567,15 @@ class RandomExpressionGenerator {
             override fun resolve(generationContext: GenerationContext, references: Map<String, SortArgument>): SortArgument {
                 val candidates = generationContext.sortIndex[sort] ?: generationFailed("No sort matching $sort")
                 val idx = candidates.random(generationContext.random)
+                return SortArgument(generationContext.sorts[idx], idx)
+            }
+        }
+
+        private class NotArraySortProvider(val sort: Class<KSort>) : SortProvider {
+            override fun resolve(generationContext: GenerationContext, references: Map<String, SortArgument>): SortArgument {
+                val candidates = generationContext.sortIndex[sort] ?: generationFailed("No sort matching $sort")
+                val filteredCandidates = candidates.filter { generationContext.sorts[it] !is KArraySortBase<*> }
+                val idx = filteredCandidates.random(generationContext.random)
                 return SortArgument(generationContext.sorts[idx], idx)
             }
         }

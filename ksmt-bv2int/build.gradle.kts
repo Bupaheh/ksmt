@@ -9,10 +9,13 @@ repositories {
 
 dependencies {
     implementation(project(":ksmt-core"))
-    implementation(project(":ksmt-z3"))
-    implementation(project(":ksmt-cvc5"))
-    implementation(project(":ksmt-runner"))
-    testImplementation(project(mapOf("path" to ":ksmt-test")))
+
+    testImplementation(project(":ksmt-cvc5"))
+    testImplementation(project(":ksmt-z3"))
+    testImplementation(project(":ksmt-yices"))
+    testImplementation(project(":ksmt-bitwuzla"))
+    testImplementation(project(":ksmt-runner"))
+    testImplementation(project(":ksmt-test"))
 }
 
 publishing {

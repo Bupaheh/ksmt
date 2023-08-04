@@ -4,6 +4,8 @@ import io.ksmt.expr.KArrayConst
 import io.ksmt.expr.KDistinctExpr
 import io.ksmt.expr.KEqExpr
 import io.ksmt.expr.KExpr
+import io.ksmt.sort.KArray2Sort
+import io.ksmt.sort.KArray3Sort
 import io.ksmt.sort.KArraySortBase
 import io.ksmt.sort.KBoolSort
 import io.ksmt.sort.KBvSort
@@ -22,12 +24,9 @@ class Bv2IntAstFilter : AstFilter() {
     }
 
     override fun filterExpr(expr: KExpr<*>): Boolean {
-        if (expr is KArrayConst<*, *> && expr.value.sort != expr.sort.range) {
-            println("oops")
-            return false
-        }
         if (expr is KEqExpr<*> && expr.lhs.sort is KArraySortBase<*>) return false
         if (expr is KDistinctExpr<*> && expr.args.first().sort is KArraySortBase<*>) return false
+        expr.sort.let { if (it is KBvSort && it.sizeBits > 132u) return false }
 
         return true
     }
