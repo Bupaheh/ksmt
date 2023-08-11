@@ -15,13 +15,14 @@ import io.ksmt.utils.uncheckedCast
 
 class KBv2IntModel(
     private val ctx: KContext,
+    private val bv2IntContext: KBv2IntContext,
     private val model: KModel,
     private val rewriter: KBv2IntRewriter
 ) : KModel {
     override val declarations: Set<KDecl<*>> by lazy {
         model.declarations
-            .filterNot { rewriter.isAuxDecl(it) }
-            .map { rewriter.cachedDecl(it) ?: error("Unexpected null declaration") }
+            .filterNot { bv2IntContext.isAuxDecl(it) }
+            .map { bv2IntContext.cachedDecl(it) ?: error("Unexpected null declaration") }
             .toSet()
     }
 

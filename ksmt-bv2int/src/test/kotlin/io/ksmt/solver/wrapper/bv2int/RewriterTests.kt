@@ -12,6 +12,7 @@ import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.sort.KBoolSort
 import io.ksmt.sort.KSort
 import io.ksmt.test.GenerationParameters
+import io.ksmt.utils.mkConst
 import io.ksmt.utils.uncheckedCast
 import kotlin.random.Random
 import kotlin.test.Test
@@ -26,20 +27,28 @@ class RewriterTests {
             this
         }.uncheckedCast()
 
-    private fun KContext.testInt2BvModelConversion(exprs: List<KExpr<KBoolSort>>, mode: KBv2IntRewriter.AndRewriteMode) {
+    private fun KContext.testInt2BvModelConversion(
+        exprs: List<KExpr<KBoolSort>>,
+        rewriteMode: KBv2IntRewriter.RewriteMode,
+        andRewriteMode: KBv2IntRewriter.AndRewriteMode,
+        signedness: KBv2IntRewriter.SignednessMode = KBv2IntRewriter.SignednessMode.UNSIGNED
+    ) {
         var satCnt = 0
         var timeoutCnt = 0
-
-        val rewriter = KBv2IntRewriter(this, KBv2IntRewriter.RewriteMode.EAGER, mode)
 
         KSolverRunnerManager().use { solverManager ->
             exprs.forEachIndexed { i, expr ->
                 println("$i/${exprs.size - 1}")
 
-                val transformedExpr = rewriter.rewriteBv2Int(expr.uncheckedCast())
-
-                solverManager.createSolver(this, KZ3Solver::class).use { solver ->
-                    solver.assert(transformedExpr)
+                solverManager.createSolver(this, KZ3Solver::class).use { innerSolver ->
+                    val solver = KBv2IntSolver(
+                        this,
+                        innerSolver,
+                        rewriteMode,
+                        andRewriteMode,
+                        signedness
+                    )
+                    solver.assert(expr)
 
                     val status = solver.check(3.seconds)
 
@@ -52,7 +61,7 @@ class RewriterTests {
 
                     satCnt++
 
-                    val model = KBv2IntModel(this, solver.model(), rewriter)
+                    val model = solver.model()
                     val simplified =  model.eval(expr, true)
 
                     assert(simplified == trueExpr)
@@ -68,7 +77,8 @@ class RewriterTests {
         var satCnt = 0
         var timeoutCnt = 0
 
-        val rewriter = KBv2IntRewriter(this, KBv2IntRewriter.RewriteMode.EAGER, mode)
+        val bv2intContext = KBv2IntContext(this)
+        val rewriter = KBv2IntRewriter(this, bv2intContext, KBv2IntRewriter.RewriteMode.EAGER, mode)
 
         KSolverRunnerManager().use { solverManager ->
             exprs.forEachIndexed { i, expr ->
@@ -141,7 +151,7 @@ class RewriterTests {
     }
 
     @Test
-    fun testInt2BvModelConversion() = with(KContext(simplificationMode = KContext.SimplificationMode.NO_SIMPLIFY)) {
+    fun testInt2BvModelConversion() = with(KContext()) {
         val params = GenerationParameters(
             seedExpressionsPerSort = 20,
             possibleIntValues = 2..64,
@@ -152,18 +162,24 @@ class RewriterTests {
         val weights = Bv2IntBenchmarkWeightBuilder()
             .enableBvCmp(5.0)
             .enableBvLia(10.0)
-            .enableBvBitwise(2.0)
+//            .enableBvWeird(2.0)
+            .enableBvBitwise(0.5)
             .build()
         val expressions = generateRandomExpressions(
-            size = 1000,
-            batchSize = 500,
+            size = 2000,
+            batchSize = 300,
             params = params,
-            random = Random(1),
+            random = Random(4),
             weights = weights,
             isVerbose = true
         )
 
-        testInt2BvModelConversion(expressions, KBv2IntRewriter.AndRewriteMode.BITWISE)
+        testInt2BvModelConversion(
+            expressions,
+            KBv2IntRewriter.RewriteMode.EAGER,
+            KBv2IntRewriter.AndRewriteMode.BITWISE,
+            KBv2IntRewriter.SignednessMode.UNSIGNED
+        )
     }
 
     @Test
@@ -178,13 +194,14 @@ class RewriterTests {
         val weights = Bv2IntBenchmarkWeightBuilder()
             .enableBvCmp(5.0)
             .enableBvLia(10.0)
-            .enableBvBitwise(2.0)
+//            .enableBvWeird(2.0)
+            .enableBvBitwise(0.5)
             .build()
         val expressions = generateRandomExpressions(
-            size = 1000,
-            batchSize = 500,
+            size = 2000,
+            batchSize = 300,
             params = params,
-            random = Random(22),
+            random = Random(5),
             weights = weights,
             isVerbose = true
         )

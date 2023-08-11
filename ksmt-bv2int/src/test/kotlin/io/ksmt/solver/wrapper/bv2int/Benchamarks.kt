@@ -3,6 +3,7 @@ package io.ksmt.solver.wrapper.bv2int
 import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
+import com.sri.yices.Yices
 import io.ksmt.KContext
 import io.ksmt.expr.KExpr
 import io.ksmt.runner.serializer.AstSerializationCtx
@@ -16,11 +17,12 @@ import io.ksmt.sort.KBoolSort
 import io.ksmt.utils.uncheckedCast
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.RewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.AndRewriteMode
+import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode
 import java.io.File
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration.Companion.seconds
 
-private fun KContext.readFormulas(file: File): List<KExpr<KBoolSort>> {
+fun KContext.readFormulas(file: File): List<KExpr<KBoolSort>> {
     val srcSerializationCtx = AstSerializationCtx().apply { initCtx(this@readFormulas) }
     val srcMarshaller = AstSerializationCtx.marshaller(srcSerializationCtx)
     val emptyRdSerializationCtx = SerializationCtx(Serializers())
@@ -57,19 +59,6 @@ private fun KContext.measureAssertTime(expr: KExpr<KBoolSort>, solver: Solver): 
     return MeasureAssertTimeResult(time, status)
 }
 
-private fun KContext.printDeclCount(expr: KExpr<KBoolSort>, isRewritten: Boolean = false) {
-    val exprToCount = if (isRewritten) {
-        KBv2IntRewriter(this, RewriteMode.EAGER, AndRewriteMode.SUM).rewriteBv2Int(expr)
-    } else {
-        expr
-    }
-    val cnt = KDeclCounter(this).countDeclarations(exprToCount)
-
-    for ((k, v) in cnt) {
-        println("$k: $v")
-    }
-}
-
 private fun KContext.runBenchmark(
     outputFile: File,
     solver: Solver,
@@ -102,8 +91,9 @@ fun KContext.readSFormulas(): List<KExpr<KBoolSort>> {
 
 class Solver(
     private val solver: InnerSolver,
-    private val rewriteMode: RewriteMode = RewriteMode.EAGER,
-    private val andRewriteMode: AndRewriteMode? = null
+    private val rewriteMode: RewriteMode? = null,
+    private val andRewriteMode: AndRewriteMode = AndRewriteMode.SUM,
+    private val signednessMode: SignednessMode = SignednessMode.UNSIGNED
 ) {
     enum class InnerSolver {
         Z3,
@@ -130,66 +120,78 @@ class Solver(
 
     fun construct(ctx: KContext): KSolver<*> {
         val innerSolver = solver.construct(ctx)
-        if (andRewriteMode == null) return innerSolver
+        if (rewriteMode == null) return innerSolver
 
-        return KBv2IntSolver(ctx, innerSolver, rewriteMode, andRewriteMode)
+        return KBv2IntSolver(ctx, innerSolver, rewriteMode, andRewriteMode, signednessMode)
     }
 
     override fun toString(): String {
         val innerSolver = solver.toString()
-        if (andRewriteMode == null) return innerSolver
+        if (rewriteMode == null) return innerSolver
 
         val prefix = when (rewriteMode) {
             RewriteMode.EAGER -> "Eager-"
-            RewriteMode.LAZY -> "Lazy-"
+            RewriteMode.LAZY -> "NewLazy-"
         }
 
-        val suffix =  when (andRewriteMode) {
+        var suffix =  when (andRewriteMode) {
             AndRewriteMode.SUM -> "-Sum"
             AndRewriteMode.BITWISE -> "-Bitwise"
+        }
+
+        suffix += when (signednessMode) {
+            SignednessMode.UNSIGNED -> ""
+            SignednessMode.SIGNED_LAZY_OVERFLOW -> "-Signed"
+            SignednessMode.SIGNED_NO_OVERFLOW -> "-SignedNoOverflow"
         }
 
         return prefix + innerSolver + suffix
     }
 }
 
+fun KContext.testing(expr: KExpr<KBoolSort>) {
+    KBv2IntSolver(this, KZ3Solver(this), RewriteMode.LAZY).use { solver ->
+        solver.assert(expr)
+        println(solver.check())
+    }
+}
+
 fun main() {
-    val ctx = KContext(simplificationMode = KContext.SimplificationMode.NO_SIMPLIFY)
+    val ctx = KContext()
     val expressionsFileName = "1ablia"
     val expressions = ctx.readFormulas(File("generatedExpressions/$expressionsFileName"))
         .mapIndexed { id, expr -> id to expr }
         .filter { (id, _) -> id in 0..1000 }
 
-//    expressions.take(10).forEach {
-//        ctx.printDeclCount(it.second, false)
-//        println()
-//    }
-//
-//    return
+    ctx.testing(expressions[918].second)
 
-    val solvers = listOf(Solver.InnerSolver.Z3)
-    val modes = listOf(RewriteMode.EAGER)
-    val andModes = listOf(null)
+    return
+
+    val solvers = listOf(
+        Solver(Solver.InnerSolver.Z3),
+        Solver(Solver.InnerSolver.CVC5),
+        Solver(Solver.InnerSolver.Z3, RewriteMode.LAZY, andRewriteMode = AndRewriteMode.BITWISE),
+        Solver(Solver.InnerSolver.CVC5, RewriteMode.LAZY, andRewriteMode = AndRewriteMode.BITWISE),
+        Solver(Solver.InnerSolver.Z3, RewriteMode.LAZY, andRewriteMode = AndRewriteMode.SUM),
+        Solver(Solver.InnerSolver.CVC5, RewriteMode.LAZY, andRewriteMode = AndRewriteMode.SUM),
+        Solver(Solver.InnerSolver.Yices),
+//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+    )
 
     ctx.runBenchmark(
         outputFile = File("benchmarkResults/trash.csv"),
-        solver = Solver(solvers.first(), modes.first(), andModes.first()),
+        solver = Solver(Solver.InnerSolver.Z3),
         expressions = expressions.take(700),
         repeatNum = 3
     )
 
-    for (slv in solvers) {
-        for (andMode in andModes) {
-            for (mode in modes) {
-                ctx.runBenchmark(
-                    outputFile = File("benchmarkResults/${expressionsFileName}.csv"),
-                    solver = Solver(slv, mode, andMode),
-                    expressions = expressions,
-                    repeatNum = 3
-                )
-
-                if (andMode == null) break
-            }
-        }
+    for (solver in solvers) {
+        ctx.runBenchmark(
+            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
+            solver = solver,
+            expressions = expressions,
+            repeatNum = 3
+        )
     }
 }

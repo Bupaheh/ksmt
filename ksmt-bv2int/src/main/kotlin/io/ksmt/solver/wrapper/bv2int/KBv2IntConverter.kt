@@ -20,7 +20,9 @@ import io.ksmt.sort.KSort
 import io.ksmt.utils.ArithUtils.bigIntegerValue
 import io.ksmt.utils.uncheckedCast
 
-class KBv2IntConverter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
+class KBv2IntConverter(
+    ctx: KContext
+) : KNonRecursiveTransformer(ctx) {
     private val expectedSort = hashMapOf<KExpr<*>, KSort>()
 
     fun <T : KSort> convertExpr(expr: KExpr<*>, sort: T): KExpr<T> {
