@@ -15,11 +15,7 @@ class KDeclCounter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
         if (expr is KConst<*>) return expr
         if (expr is KInterpretedValue<*>) return expr
 
-        val name = if (expr.decl.name == "select" || expr.decl.name == "store") {
-            expr.decl.name + expr.args.size
-        } else {
-            expr.decl.name
-        }
+        val name = expr.decl.name
 
         declCount[name] = declCount.getOrDefault(name, 0) + 1
 
