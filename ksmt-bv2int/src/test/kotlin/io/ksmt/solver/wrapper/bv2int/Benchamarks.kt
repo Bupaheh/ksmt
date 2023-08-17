@@ -3,7 +3,6 @@ package io.ksmt.solver.wrapper.bv2int
 import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
-import com.sri.yices.Yices
 import io.ksmt.KContext
 import io.ksmt.expr.KExpr
 import io.ksmt.runner.serializer.AstSerializationCtx
@@ -40,23 +39,27 @@ fun KContext.readFormulas(file: File): List<KExpr<KBoolSort>> {
     return expressions
 }
 
-private data class MeasureAssertTimeResult(val nanoTime: Long, val status: KSolverStatus) {
-    override fun toString(): String = "$status ${nanoTime / 1e6}"
+private data class MeasureAssertTimeResult(val nanoTime: Long, val status: KSolverStatus, val roundCnt: Int) {
+    override fun toString(): String = "$status ${nanoTime / 1e6} $roundCnt"
 }
 
-private fun KContext.measureAssertTime(expr: KExpr<KBoolSort>, solver: Solver): MeasureAssertTimeResult {
-    val time: Long
+private fun KContext.measureAssertTime(expr: KExpr<KBoolSort>, solverDescription: Solver): MeasureAssertTimeResult {
+    val resTime: Long
     var status: KSolverStatus
+    val solver = solverDescription.construct(this)
 
-    solver.construct(this).use { slv ->
-        slv.assert(expr)
-
-        time = measureNanoTime {
-            status = slv.check(2.seconds)
-        }
+    solver.resetCheckTime()
+    val time = measureNanoTime {
+        solver.assert(expr)
+        status = solver.check(2.seconds)
     }
 
-    return MeasureAssertTimeResult(time, status)
+//    resTime = solver.getCheckTime()
+    resTime = time
+
+    solver.close()
+
+    return MeasureAssertTimeResult(resTime, status, solver.roundCount)
 }
 
 private fun KContext.runBenchmark(
@@ -72,7 +75,7 @@ private fun KContext.runBenchmark(
             val res = measureAssertTime(expr, solver)
 
             println(res)
-            outputFile.appendText("$exprId,$repeatIdx,$solver,${res.status},${res.nanoTime}\n")
+            outputFile.appendText("$exprId,$repeatIdx,$solver,${res.status},${res.nanoTime},${res.roundCnt}\n")
 
             if (res.status == KSolverStatus.UNKNOWN) return@forEach
         }
@@ -131,7 +134,7 @@ class Solver(
 
         val prefix = when (rewriteMode) {
             RewriteMode.EAGER -> "Eager-"
-            RewriteMode.LAZY -> "NewLazy-"
+            RewriteMode.LAZY -> "LazyImportantApps-"
         }
 
         var suffix =  when (andRewriteMode) {
@@ -142,6 +145,7 @@ class Solver(
         suffix += when (signednessMode) {
             SignednessMode.UNSIGNED -> ""
             SignednessMode.SIGNED_LAZY_OVERFLOW -> "-Signed"
+            SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedNoBounds"
             SignednessMode.SIGNED_NO_OVERFLOW -> "-SignedNoOverflow"
         }
 
@@ -149,46 +153,72 @@ class Solver(
     }
 }
 
-fun KContext.testing(expr: KExpr<KBoolSort>) {
-    KBv2IntSolver(this, KZ3Solver(this), RewriteMode.LAZY).use { solver ->
-        solver.assert(expr)
-        println(solver.check())
+val exprsToCheck = mutableListOf(0, 27, 31, 50, 59, 76, 88, 89, 117, 127, 132, 134, 138, 147, 153, 166)
+// lia
+
+fun runDirBenchmark(paths: List<String>, solvers: List<Solver>, resPath: String) {
+    for (solver in solvers) {
+        var cnt = 121
+
+        paths.forEach { path ->
+            val ctx = KContext()
+            val expressions = ctx.readFormulas(File(path))
+                .mapIndexed { id, expr -> id + cnt to expr }
+                .filter { (id, _) -> id < 10000 && id !in listOf(94) }
+            cnt += expressions.size
+
+            ctx.runBenchmark(
+                outputFile = File("benchmarkResults/$resPath.csv"),
+                solver = solver,
+                expressions = expressions,
+                repeatNum = 1
+            )
+
+            println(exprsToCheck)
+            println(path)
+        }
     }
 }
 
+
 fun main() {
+    val solvers = listOf(
+//        Solver(Solver.InnerSolver.CVC5),
+//        Solver(Solver.InnerSolver.Yices),
+//        Solver(Solver.InnerSolver.Z3),
+//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED),
+//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_NO_OVERFLOW),
+//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS),
+//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_NO_OVERFLOW),
+//        Solver(Solver.InnerSolver.Bitwuzla)
+//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, AndRewriteMode.SUM),
+//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, AndRewriteMode.BITWISE)
+    )
+
+//    val prefix = "QF_BV_lia"
+//    val paths = (11..46).map { "generatedExpressions/lia/${prefix}$it" }
+//
+//    runDirBenchmark(paths, solvers, prefix)
+//    return
+
     val ctx = KContext()
-    val expressionsFileName = "1ablia"
+    val expressionsFileName = "1Salia"
     val expressions = ctx.readFormulas(File("generatedExpressions/$expressionsFileName"))
         .mapIndexed { id, expr -> id to expr }
-        .filter { (id, _) -> id in 0..1000 }
-
-    ctx.testing(expressions[918].second)
-
-    return
-
-    val solvers = listOf(
-        Solver(Solver.InnerSolver.Z3),
-        Solver(Solver.InnerSolver.CVC5),
-        Solver(Solver.InnerSolver.Z3, RewriteMode.LAZY, andRewriteMode = AndRewriteMode.BITWISE),
-        Solver(Solver.InnerSolver.CVC5, RewriteMode.LAZY, andRewriteMode = AndRewriteMode.BITWISE),
-        Solver(Solver.InnerSolver.Z3, RewriteMode.LAZY, andRewriteMode = AndRewriteMode.SUM),
-        Solver(Solver.InnerSolver.CVC5, RewriteMode.LAZY, andRewriteMode = AndRewriteMode.SUM),
-        Solver(Solver.InnerSolver.Yices),
-//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
-//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
-    )
+        .filter { (id, _) -> id < 1000 }
 
     ctx.runBenchmark(
         outputFile = File("benchmarkResults/trash.csv"),
         solver = Solver(Solver.InnerSolver.Z3),
-        expressions = expressions.take(700),
+        expressions = expressions.take(200),
         repeatNum = 3
     )
 
+
     for (solver in solvers) {
         ctx.runBenchmark(
-            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
+            outputFile = File("benchmarkResults/${expressionsFileName}AT.csv"),
             solver = solver,
             expressions = expressions,
             repeatNum = 3

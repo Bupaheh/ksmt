@@ -2,6 +2,7 @@ package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.KContext
 import io.ksmt.decl.KDecl
+import io.ksmt.expr.KAddArithExpr
 import io.ksmt.expr.KAndBinaryExpr
 import io.ksmt.expr.KAndExpr
 import io.ksmt.expr.KApp
@@ -74,24 +75,68 @@ import io.ksmt.expr.KBvXorExpr
 import io.ksmt.expr.KBvZeroExtensionExpr
 import io.ksmt.expr.KConst
 import io.ksmt.expr.KDistinctExpr
+import io.ksmt.expr.KDivArithExpr
 import io.ksmt.expr.KEqExpr
 import io.ksmt.expr.KExistentialQuantifier
 import io.ksmt.expr.KExpr
+import io.ksmt.expr.KFpAbsExpr
+import io.ksmt.expr.KFpAddExpr
+import io.ksmt.expr.KFpDivExpr
+import io.ksmt.expr.KFpEqualExpr
 import io.ksmt.expr.KFpFromBvExpr
+import io.ksmt.expr.KFpFusedMulAddExpr
+import io.ksmt.expr.KFpGreaterExpr
+import io.ksmt.expr.KFpGreaterOrEqualExpr
+import io.ksmt.expr.KFpIsInfiniteExpr
+import io.ksmt.expr.KFpIsNaNExpr
+import io.ksmt.expr.KFpIsNegativeExpr
+import io.ksmt.expr.KFpIsNormalExpr
+import io.ksmt.expr.KFpIsPositiveExpr
+import io.ksmt.expr.KFpIsSubnormalExpr
+import io.ksmt.expr.KFpIsZeroExpr
+import io.ksmt.expr.KFpLessExpr
+import io.ksmt.expr.KFpLessOrEqualExpr
+import io.ksmt.expr.KFpMaxExpr
+import io.ksmt.expr.KFpMinExpr
+import io.ksmt.expr.KFpMulExpr
+import io.ksmt.expr.KFpNegationExpr
+import io.ksmt.expr.KFpRemExpr
+import io.ksmt.expr.KFpRoundToIntegralExpr
+import io.ksmt.expr.KFpSqrtExpr
+import io.ksmt.expr.KFpSubExpr
 import io.ksmt.expr.KFpToBvExpr
+import io.ksmt.expr.KFpToFpExpr
 import io.ksmt.expr.KFpToIEEEBvExpr
+import io.ksmt.expr.KFpToRealExpr
 import io.ksmt.expr.KFunctionApp
 import io.ksmt.expr.KFunctionAsArray
+import io.ksmt.expr.KGeArithExpr
+import io.ksmt.expr.KGtArithExpr
+import io.ksmt.expr.KImpliesExpr
+import io.ksmt.expr.KIsIntRealExpr
 import io.ksmt.expr.KIteExpr
 import io.ksmt.expr.KLeArithExpr
+import io.ksmt.expr.KLtArithExpr
+import io.ksmt.expr.KModIntExpr
+import io.ksmt.expr.KMulArithExpr
 import io.ksmt.expr.KNotExpr
 import io.ksmt.expr.KOrBinaryExpr
+import io.ksmt.expr.KOrExpr
+import io.ksmt.expr.KPowerArithExpr
 import io.ksmt.expr.KQuantifier
+import io.ksmt.expr.KRealToFpExpr
+import io.ksmt.expr.KRemIntExpr
+import io.ksmt.expr.KSubArithExpr
+import io.ksmt.expr.KToIntRealExpr
+import io.ksmt.expr.KToRealIntExpr
+import io.ksmt.expr.KUnaryMinusArithExpr
 import io.ksmt.expr.KUniversalQuantifier
+import io.ksmt.expr.KXorExpr
 import io.ksmt.expr.printer.ExpressionPrinter
 import io.ksmt.expr.rewrite.KExprUninterpretedDeclCollector
 import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.expr.transformer.KTransformerBase
+import io.ksmt.sort.KArithSort
 import io.ksmt.sort.KArray2Sort
 import io.ksmt.sort.KArray3Sort
 import io.ksmt.sort.KArrayNSort
@@ -106,6 +151,7 @@ import io.ksmt.sort.KBv8Sort
 import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KFpSort
 import io.ksmt.sort.KIntSort
+import io.ksmt.sort.KRealSort
 import io.ksmt.sort.KSort
 import io.ksmt.utils.mkFreshConst
 import io.ksmt.utils.normalizeValue
@@ -140,6 +186,7 @@ class KBv2IntRewriter(
         UNSIGNED,
         SIGNED_NO_OVERFLOW,
         SIGNED_LAZY_OVERFLOW,
+        SIGNED_LAZY_OVERFLOW_NO_BOUNDS,
     }
 
     private val signedness = if (signednessMode == SignednessMode.UNSIGNED) {
@@ -221,13 +268,20 @@ class KBv2IntRewriter(
     }
 
     override fun <T : KSort> transform(expr: KConst<T>): KExpr<T> =
-        transformExprAfterTransformedBv2Int(expr) {
+        transformExprAfterTransformedBv2Int(
+            expr,
+            checkOverflow = signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
+        ) {
             rewriteDecl(expr.decl).apply(listOf()).tryAddBoundLemmas(expr.sort)
         }
 
 
     override fun <T : KSort> transform(expr: KFunctionApp<T>): KExpr<T> = with(ctx) {
-        transformExprAfterTransformedBv2Int(expr, expr.args) { args ->
+        transformExprAfterTransformedBv2Int(
+            expr,
+            expr.args,
+            checkOverflow = signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
+        ) { args ->
             rewriteDecl(expr.decl).apply(args).tryAddBoundLemmas(expr.sort)
         }
     }
@@ -499,14 +553,16 @@ class KBv2IntRewriter(
             expr = expr,
             dependency = expr.value,
             preprocessMode = WrapMode.DENORMALIZED,
-            postRewriteMode = WrapMode.DENORMALIZED
+            postRewriteMode = WrapMode.DENORMALIZED,
+            checkOverflow = true
         ) { arg ->
-            val sizeBits = expr.sort.sizeBits
-            mkIte(
-                arg eq toSignedness(mkPowerOfTwoExpr(sizeBits - 1u), sizeBits, Signedness.UNSIGNED),
-                arg,
-                -arg
-            )
+            -arg
+//            val sizeBits = expr.sort.sizeBits
+//            mkIte(
+//                arg eq toSignedness(mkPowerOfTwoExpr(sizeBits - 1u), sizeBits, Signedness.UNSIGNED),
+//                arg,
+//                -arg
+//            )
         }
     }
 
@@ -671,17 +727,36 @@ class KBv2IntRewriter(
         }
     }
 
-    override fun <T : KBvSort> transform(expr: KBvUnsignedLessExpr<T>): KExpr<KBoolSort> = with(ctx) {
+    private inline fun rewriteUnsignedCmp(
+        arg0: KExpr<KIntSort>,
+        arg1: KExpr<KIntSort>,
+        op: KContext.(KExpr<KIntSort>, KExpr<KIntSort>) -> KExpr<KBoolSort>
+    ): KExpr<KBoolSort> = with(ctx) {
+        when (signedness) {
+            Signedness.UNSIGNED -> op(arg0, arg1)
+            Signedness.SIGNED -> {
+                val condition = mkOr(
+                    arg0 ge 0.expr and (arg1 ge 0.expr),
+                    arg0 lt 0.expr and (arg1 lt 0.expr)
+                )
+
+                mkIte(
+                    condition,
+                    op(arg0, arg1),
+                    op(arg1, arg0)
+                )
+            }
+        }
+    }
+
+    override fun <T : KBvSort> transform(expr: KBvUnsignedLessExpr<T>): KExpr<KBoolSort> =
         transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
         ) { arg0: KExpr<KIntSort>, arg1: KExpr<KIntSort> ->
-            val sizeBits = expr.arg0.sort.sizeBits
-
-            toUnsigned(arg0, sizeBits) lt toUnsigned(arg1, sizeBits)
+            rewriteUnsignedCmp(arg0, arg1, KContext::mkArithLt)
         }
-    }
 
     override fun <T : KBvSort> transform(expr: KBvSignedLessExpr<T>): KExpr<KBoolSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(
@@ -694,17 +769,14 @@ class KBv2IntRewriter(
         }
     }
 
-    override fun <T : KBvSort> transform(expr: KBvUnsignedLessOrEqualExpr<T>): KExpr<KBoolSort> = with(ctx) {
+    override fun <T : KBvSort> transform(expr: KBvUnsignedLessOrEqualExpr<T>): KExpr<KBoolSort> =
         transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
-            dependency1 = expr.arg1
+            dependency1 = expr.arg1,
         ) { arg0: KExpr<KIntSort>, arg1: KExpr<KIntSort> ->
-            val sizeBits = expr.arg0.sort.sizeBits
-
-            toUnsigned(arg0, sizeBits) le toUnsigned(arg1, sizeBits)
+            rewriteUnsignedCmp(arg0, arg1, KContext::mkArithLe)
         }
-    }
 
     override fun <T : KBvSort> transform(expr: KBvSignedLessOrEqualExpr<T>): KExpr<KBoolSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(
@@ -717,16 +789,14 @@ class KBv2IntRewriter(
         }
     }
 
-    override fun <T : KBvSort> transform(expr: KBvUnsignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> = with(ctx) {
+    override fun <T : KBvSort> transform(expr: KBvUnsignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> =
         transformExprAfterTransformedBv2Int(
-            expr,
-            expr.arg0,
-            expr.arg1
+            expr = expr,
+            dependency0 = expr.arg0,
+            dependency1 = expr.arg1,
         ) { arg0: KExpr<KIntSort>, arg1: KExpr<KIntSort> ->
-            val sizeBits = expr.arg0.sort.sizeBits
-            toUnsigned(arg0, sizeBits) ge toUnsigned(arg1, sizeBits)
+            rewriteUnsignedCmp(arg0, arg1, KContext::mkArithGe)
         }
-    }
 
     override fun <T : KBvSort> transform(expr: KBvSignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(
@@ -739,16 +809,14 @@ class KBv2IntRewriter(
         }
     }
 
-    override fun <T : KBvSort> transform(expr: KBvUnsignedGreaterExpr<T>): KExpr<KBoolSort> = with(ctx) {
+    override fun <T : KBvSort> transform(expr: KBvUnsignedGreaterExpr<T>): KExpr<KBoolSort> =
         transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
-            dependency1 = expr.arg1
+            dependency1 = expr.arg1,
         ) { arg0: KExpr<KIntSort>, arg1: KExpr<KIntSort> ->
-            val sizeBits = expr.arg0.sort.sizeBits
-            toUnsigned(arg0, sizeBits) gt toUnsigned(arg1, sizeBits)
+            rewriteUnsignedCmp(arg0, arg1, KContext::mkArithGt)
         }
-    }
 
     override fun <T : KBvSort> transform(expr: KBvSignedGreaterExpr<T>): KExpr<KBoolSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(
@@ -815,12 +883,8 @@ class KBv2IntRewriter(
             preprocessMode = WrapMode.NORMALIZED,
             postRewriteMode = WrapMode.DENORMALIZED
         ) { value: KExpr<KIntSort> ->
-            when (signedness) {
-                Signedness.UNSIGNED -> value
-                Signedness.SIGNED -> {
-                    unsignedToSigned(signedToUnsigned(value, expr.value.sort.sizeBits), expr.sort.sizeBits)
-                }
-            }
+            if (expr.extensionSize == 0) return@transformExprAfterTransformedBv2Int value
+            toUnsigned(value, expr.value.sort.sizeBits)
         }
     }
 
@@ -1217,7 +1281,8 @@ class KBv2IntRewriter(
         transformExprAfterTransformedBv2Int(
             expr,
             expr.array,
-            expr.index
+            expr.index,
+            checkOverflow = signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
         ) { array: KExpr<KArraySort<KSort, KSort>>, index: KExpr<KSort> ->
             mkArraySelect(array, index.uncheckedCast()).tryAddBoundLemmas(expr.sort)
         }
@@ -1231,6 +1296,7 @@ class KBv2IntRewriter(
             expr.array,
             expr.index0,
             expr.index1,
+            checkOverflow = signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
         ) { array: KExpr<KArray2Sort<KSort, KSort, KSort>>, i0: KExpr<KSort>, i1: KExpr<KSort> ->
             mkArraySelect(array, i0.uncheckedCast(), i1.uncheckedCast()).tryAddBoundLemmas(expr.sort)
         }
@@ -1245,6 +1311,7 @@ class KBv2IntRewriter(
             expr.index0,
             expr.index1,
             expr.index2,
+            checkOverflow = signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
         ) { array: KExpr<KArray3Sort<KSort, KSort, KSort, KSort>>,
             i0: KExpr<KSort>,
             i1: KExpr<KSort>,
@@ -1260,13 +1327,15 @@ class KBv2IntRewriter(
     }
 
     override fun <R : KSort> transform(expr: KArrayNSelect<R>): KExpr<R> = with(ctx) {
-        transformExprAfterTransformedBv2Int(expr, expr.args) { args ->
-            val array = args.first()
-            val indices = args.subList(fromIndex = 1, toIndex = args.size - 1)
-            val value = args.last()
+        transformExprAfterTransformedBv2Int(
+            expr,
+            expr.args,
+            checkOverflow = signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
+        ) { args ->
+            val array: KExpr<KArrayNSort<KSort>> = args.first().uncheckedCast()
+            val indices = args.subList(fromIndex = 1, toIndex = args.size)
 
-            mkArrayNStore(array.uncheckedCast(), indices, value)
-                .tryAddBoundLemmas(expr.sort)
+            mkArrayNSelect(array, indices).tryAddBoundLemmas(expr.sort)
         }
     }
 
@@ -1316,6 +1385,182 @@ class KBv2IntRewriter(
             .distributeLemmas(constructor)
             .updatePowerOfTwoMaxArg(body.getPowerOfTwoMaxArg())
     }
+
+    override fun transform(expr: KAndExpr): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.args
+        ) { args -> mkAnd(args, flat = false, order = false) }
+
+    override fun transform(expr: KAndBinaryExpr): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.lhs, expr.rhs
+        ) { l, r -> mkAnd(l, r, flat = false, order = false) }
+
+    override fun transform(expr: KOrExpr): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.args
+        ) { args -> mkOr(args, flat = false) }
+
+    override fun transform(expr: KOrBinaryExpr): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.lhs, expr.rhs
+        ) { l, r -> mkOr(l, r, flat = false, order = false) }
+
+    override fun transform(expr: KNotExpr): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg, KContext::mkNot)
+
+    override fun transform(expr: KImpliesExpr): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.p, expr.q, KContext::mkImplies)
+
+    override fun transform(expr: KXorExpr): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.a, expr.b, KContext::mkXor)
+
+    override fun <T : KFpSort> transform(expr: KFpAbsExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.value, KContext::mkFpAbsExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpNegationExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.value, KContext::mkFpNegationExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpAddExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.roundingMode, expr.arg0, expr.arg1, KContext::mkFpAddExpr
+        )
+
+    override fun <T : KFpSort> transform(expr: KFpSubExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.roundingMode, expr.arg0, expr.arg1, KContext::mkFpSubExpr
+        )
+
+    override fun <T : KFpSort> transform(expr: KFpMulExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.roundingMode, expr.arg0, expr.arg1, KContext::mkFpMulExpr
+        )
+
+    override fun <T : KFpSort> transform(expr: KFpDivExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.roundingMode, expr.arg0, expr.arg1, KContext::mkFpDivExpr
+        )
+
+    override fun <T : KFpSort> transform(expr: KFpFusedMulAddExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.roundingMode, expr.arg0, expr.arg1, expr.arg2, KContext::mkFpFusedMulAddExpr
+        )
+
+    override fun <T : KFpSort> transform(expr: KFpSqrtExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.roundingMode, expr.value, KContext::mkFpSqrtExpr
+        )
+
+    override fun <T : KFpSort> transform(expr: KFpRemExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg0, expr.arg1, KContext::mkFpRemExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpRoundToIntegralExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.roundingMode, expr.value, KContext::mkFpRoundToIntegralExpr
+        )
+
+    override fun <T : KFpSort> transform(expr: KFpMinExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg0, expr.arg1, KContext::mkFpMinExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpMaxExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg0, expr.arg1, KContext::mkFpMaxExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpLessOrEqualExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg0, expr.arg1, KContext::mkFpLessOrEqualExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpLessExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg0, expr.arg1, KContext::mkFpLessExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpGreaterOrEqualExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.arg0, expr.arg1, KContext::mkFpGreaterOrEqualExpr
+        )
+
+    override fun <T : KFpSort> transform(expr: KFpGreaterExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg0, expr.arg1, KContext::mkFpGreaterExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpEqualExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg0, expr.arg1, KContext::mkFpEqualExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpIsNormalExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.value, KContext::mkFpIsNormalExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpIsSubnormalExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.value, KContext::mkFpIsSubnormalExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpIsZeroExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.value, KContext::mkFpIsZeroExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpIsInfiniteExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.value, KContext::mkFpIsInfiniteExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpIsNaNExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.value, KContext::mkFpIsNaNExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpIsNegativeExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.value, KContext::mkFpIsNegativeExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpIsPositiveExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.value, KContext::mkFpIsPositiveExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpToRealExpr<T>): KExpr<KRealSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.value, KContext::mkFpToRealExpr)
+
+    override fun <T : KFpSort> transform(expr: KFpToFpExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.roundingMode, expr.value
+        ) { rm, value -> mkFpToFpExpr(expr.sort, rm, value) }
+
+    override fun <T : KFpSort> transform(expr: KRealToFpExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(
+            expr, expr.roundingMode, expr.value
+        ) { rm, value -> mkRealToFpExpr(expr.sort, rm, value) }
+
+    override fun <T : KArithSort> transform(expr: KAddArithExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.args, KContext::mkArithAdd)
+
+    override fun <T : KArithSort> transform(expr: KMulArithExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.args, KContext::mkArithMul)
+
+    override fun <T : KArithSort> transform(expr: KSubArithExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.args, KContext::mkArithSub)
+
+    override fun <T : KArithSort> transform(expr: KUnaryMinusArithExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg, KContext::mkArithUnaryMinus)
+
+    override fun <T : KArithSort> transform(expr: KDivArithExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.lhs, expr.rhs, KContext::mkArithDiv)
+
+    override fun <T : KArithSort> transform(expr: KPowerArithExpr<T>): KExpr<T> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.lhs, expr.rhs, KContext::mkArithPower)
+
+    override fun <T : KArithSort> transform(expr: KLtArithExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.lhs, expr.rhs, KContext::mkArithLt)
+
+    override fun <T : KArithSort> transform(expr: KLeArithExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.lhs, expr.rhs, KContext::mkArithLe)
+
+    override fun <T : KArithSort> transform(expr: KGtArithExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.lhs, expr.rhs, KContext::mkArithGt)
+
+    override fun <T : KArithSort> transform(expr: KGeArithExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.lhs, expr.rhs, KContext::mkArithGe)
+
+    override fun transform(expr: KModIntExpr): KExpr<KIntSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.lhs, expr.rhs, KContext::mkIntMod)
+
+    override fun transform(expr: KRemIntExpr): KExpr<KIntSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.lhs, expr.rhs, KContext::mkIntRem)
+
+    override fun transform(expr: KToRealIntExpr): KExpr<KRealSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg, KContext::mkIntToReal)
+
+    override fun transform(expr: KToIntRealExpr): KExpr<KIntSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg, KContext::mkRealToInt)
+
+    override fun transform(expr: KIsIntRealExpr): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2IntDefault(expr, expr.arg, KContext::mkRealIsInt)
+
 
     private fun KContext.toSignedness(
         value: KExpr<KIntSort>,
@@ -1394,18 +1639,20 @@ class KBv2IntRewriter(
 
         if (signedness == Signedness.UNSIGNED || !flag || expr.sort !is KIntSort || sort !is KBvSort) return expr
 
-        if (signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW) {
-            setOverflowSizeBits(expr.uncheckedCast(), sort.sizeBits)
-        } else {
+        if (signednessMode == SignednessMode.SIGNED_NO_OVERFLOW) {
             expr.tryAddBoundLemmas(sort)
+        } else {
+            setOverflowSizeBits(expr.uncheckedCast(), sort.sizeBits)
         }
     }
 
     private inline fun <T : KSort> transformExprAfterTransformedBv2Int(
         expr: KExpr<T>,
         postRewriteMode: WrapMode = WrapMode.NORMALIZED,
+        checkOverflow: Boolean = false,
         transformer: () -> KExpr<*>
-    ): KExpr<T> = transformer().postRewriteResult(postRewriteMode, expr.sort)
+    ): KExpr<T> = transformer().addForOverflowCheck(expr.sort, checkOverflow)
+        .postRewriteResult(postRewriteMode, expr.sort)
 
     private inline fun <T : KSort, B : KExpr<*>> transformExprAfterTransformedBv2Int(
         expr: KExpr<T>,
@@ -1545,6 +1792,61 @@ class KBv2IntRewriter(
             .postRewriteResult(postRewriteMode, expr.sort)
     }
 
+    private inline fun <In : KExpr<T>, Out : KExpr<T>, T : KSort, A : KSort> transformExprAfterTransformedBv2IntDefault(
+        expr: In,
+        dependencies: List<KExpr<A>>,
+        transformer: KContext.(List<KExpr<A>>) -> Out
+    ): KExpr<T> = transformExprAfterTransformed(expr, dependencies) { transformedDependencies ->
+        return ctx.transformer(transformedDependencies)
+            .distributeDependencies(transformedDependencies)
+    }
+
+    private inline fun <In : KExpr<T>, Out : KExpr<T>, T : KSort, A : KSort> transformExprAfterTransformedBv2IntDefault(
+        expr: In,
+        dependency: KExpr<A>,
+        transformer: KContext.(KExpr<A>) -> Out
+    ): KExpr<T> = transformExprAfterTransformed(expr, dependency) { td ->
+        return ctx.transformer(td)
+            .distributeDependencies(listOf(td))
+    }
+
+    private inline fun <In : KExpr<T>, Out : KExpr<T>, T : KSort, A0 : KSort, A1 : KSort>
+    transformExprAfterTransformedBv2IntDefault(
+        expr: In,
+        dependency0: KExpr<A0>,
+        dependency1: KExpr<A1>,
+        transformer: KContext.(KExpr<A0>, KExpr<A1>) -> Out
+    ): KExpr<T> = transformExprAfterTransformed(expr, dependency0, dependency1) { td0, td1 ->
+        return ctx.transformer(td0, td1)
+            .distributeDependencies(listOf(td0, td1))
+    }
+
+    private inline fun <In : KExpr<T>, Out : KExpr<T>, T : KSort, A0 : KSort, A1 : KSort, A2 : KSort>
+    transformExprAfterTransformedBv2IntDefault(
+        expr: In,
+        dependency0: KExpr<A0>,
+        dependency1: KExpr<A1>,
+        dependency2: KExpr<A2>,
+        transformer: KContext.(KExpr<A0>, KExpr<A1>, KExpr<A2>) -> Out
+    ): KExpr<T> = transformExprAfterTransformed(expr, dependency0, dependency1, dependency2) { td0, td1, td2 ->
+        return ctx.transformer(td0, td1, td2)
+            .distributeDependencies(listOf(td0, td1, td2))
+    }
+
+    private inline fun <In : KExpr<T>, Out : KExpr<T>, T : KSort, A0 : KSort, A1 : KSort, A2 : KSort, A3 : KSort>
+    transformExprAfterTransformedBv2IntDefault(
+        expr: In,
+        dependency0: KExpr<A0>,
+        dependency1: KExpr<A1>,
+        dependency2: KExpr<A2>,
+        dependency3: KExpr<A3>,
+        transformer: KContext.(KExpr<A0>, KExpr<A1>, KExpr<A2>, KExpr<A3>) -> Out
+    ): KExpr<T> =
+        transformExprAfterTransformed(expr, dependency0, dependency1, dependency2, dependency3) { td0, td1, td2, td3 ->
+            return ctx.transformer(td0, td1, td2, td3)
+                .distributeDependencies(listOf(td0, td1, td2, td3))
+        }
+
     private fun <T : KSort> KExpr<T>.tryUnwrap(): KExpr<T> =
         if (this is KBv2IntAuxExpr) {
             expr.uncheckedCast()
@@ -1574,9 +1876,8 @@ class KBv2IntRewriter(
 
     private fun <T : KSort> KExpr<T>.tryAddBoundLemmas(sort: KSort) = with(ctx) {
         val expr = this@tryAddBoundLemmas
-        if (sort !is KBvSort) return expr
+        if (sort !is KBvSort || signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS) return expr
         val sizeBits = sort.sizeBits
-
         when (signedness) {
             Signedness.UNSIGNED -> expr.addLemma(0.expr le expr.uncheckedCast())
                 .addLemma(mkPowerOfTwoExpr(sizeBits) gt expr.uncheckedCast())
