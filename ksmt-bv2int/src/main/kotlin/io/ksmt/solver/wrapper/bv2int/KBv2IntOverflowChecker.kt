@@ -2,7 +2,13 @@ package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.KContext
 import io.ksmt.expr.KAddArithExpr
+import io.ksmt.expr.KArray2Select
+import io.ksmt.expr.KArray3Select
+import io.ksmt.expr.KArrayNSelect
+import io.ksmt.expr.KArraySelect
+import io.ksmt.expr.KArraySelectBase
 import io.ksmt.expr.KBv2IntExpr
+import io.ksmt.expr.KConst
 import io.ksmt.expr.KDivArithExpr
 import io.ksmt.expr.KExpr
 import io.ksmt.expr.KFunctionApp
@@ -17,6 +23,8 @@ import io.ksmt.expr.KUnaryMinusArithExpr
 import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.solver.KModel
 import io.ksmt.sort.KArithSort
+import io.ksmt.sort.KArrayNSort
+import io.ksmt.sort.KBoolSort
 import io.ksmt.sort.KIntSort
 import io.ksmt.sort.KSort
 import io.ksmt.utils.ArithUtils.bigIntegerValue
@@ -28,6 +36,11 @@ class KBv2IntOverflowChecker private constructor(
     private val model: KModel,
     private val rewriter: KBv2IntRewriter
 ) : KNonRecursiveTransformer(ctx) {
+    private var flag = false
+    private val boundLemmas = mutableListOf<KExpr<KBoolSort>>()
+
+    override fun <T : KSort> transform(expr: KConst<T>): KExpr<T> =
+        transformExprAfterTransformedOverflow(expr) { expr }
 
     override fun <T : KSort> transform(expr: KIteExpr<T>): KExpr<T> = with(ctx) {
         transformExprAfterTransformedOverflow(expr, expr.condition, expr.trueBranch, expr.falseBranch, ::mkIte)
@@ -71,25 +84,64 @@ class KBv2IntOverflowChecker private constructor(
         transformExprAfterTransformedOverflow(expr, expr.lhs, expr.rhs, ::mkIntRem)
     }
 
+    override fun <D : KSort, R : KSort> transform(expr: KArraySelect<D, R>): KExpr<R> = with(ctx) {
+        transformExprAfterTransformedOverflow(expr, expr.array, expr.index, ::mkArraySelect)
+    }
+
+    override fun <D0 : KSort, D1 : KSort, R : KSort> transform(expr: KArray2Select<D0, D1, R>): KExpr<R> = with(ctx) {
+        transformExprAfterTransformedOverflow(expr, expr.array, expr.index0, expr.index1, ::mkArraySelect)
+    }
+
+    override fun <D0 : KSort, D1 : KSort, D2 : KSort, R : KSort> transform(
+        expr: KArray3Select<D0, D1, D2, R>
+    ): KExpr<R> = with(ctx) {
+        transformExprAfterTransformedOverflow(expr, expr.array, expr.index0, expr.index1, expr.index2, ::mkArraySelect)
+    }
+
+    override fun <R : KSort> transform(expr: KArrayNSelect<R>): KExpr<R> = with(ctx) {
+        transformExprAfterTransformedOverflow(expr, expr.args) { args ->
+            val array: KExpr<KArrayNSort<KSort>> = args.first().uncheckedCast()
+            val indices = args.subList(fromIndex = 1, toIndex = args.size)
+
+            mkArrayNSelect(array, indices).uncheckedCast()
+        }
+    }
+
     private fun transformIfOverflow(expr: KExpr<KIntSort>, sizeBits: UInt): KExpr<KIntSort> = with(ctx) {
         val value = model.eval(expr, false)
-
-        if (value !is KIntNumExpr) {
-            rewriter.setOverflowSizeBits(expr, sizeBits)
-            return expr
-        }
-
-        val integerValue = value.bigIntegerValue
         val pow = BigInteger.TWO.pow(sizeBits.toInt() - 1)
         val lowerBound = -pow
         val upperBound = pow - BigInteger.ONE
 
-        if (integerValue in lowerBound..upperBound) {
-            rewriter.setOverflowSizeBits(expr, sizeBits)
-            return expr
+        if (value is KIntNumExpr) {
+            val integerValue = value.bigIntegerValue
+
+            if (integerValue in lowerBound..upperBound) {
+                rewriter.setOverflowSizeBits(expr, sizeBits)
+                return expr
+            }
         }
 
-        unsignedToSigned(expr mod mkPowerOfTwoExpr(sizeBits), sizeBits)
+        flag = true
+
+        if (expr is KConst<*> || expr is KFunctionApp<*> || expr is KArraySelectBase<*, *>) {
+            boundLemmas.add(lowerBound.expr le expr)
+            boundLemmas.add(upperBound.expr ge expr)
+
+            expr
+        } else {
+            unsignedToSigned(expr mod mkPowerOfTwoExpr(sizeBits), sizeBits)
+        }
+    }
+
+    private inline fun <T : KSort> transformExprAfterTransformedOverflow(
+        expr: KExpr<T>,
+        transformer: () -> KExpr<T>
+    ): KExpr<T> {
+        val transformed = transformer()
+        val sizeBits = rewriter.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
+        require(transformed.sort is KIntSort)
+        return transformIfOverflow(transformed.uncheckedCast(), sizeBits).uncheckedCast()
     }
 
     private inline fun <T : KSort, B : KSort> transformExprAfterTransformedOverflow(
@@ -128,6 +180,26 @@ class KBv2IntOverflowChecker private constructor(
         transformIfOverflow(transformed.uncheckedCast(), sizeBits).uncheckedCast()
     }
 
+    private inline fun <T : KSort, B0 : KSort, B1 : KSort, B2 : KSort, B3 : KSort> transformExprAfterTransformedOverflow(
+        expr: KExpr<T>,
+        dependency0: KExpr<B0>,
+        dependency1: KExpr<B1>,
+        dependency2: KExpr<B2>,
+        dependency3: KExpr<B3>,
+        transformer: (KExpr<B0>, KExpr<B1>, KExpr<B2>, KExpr<B3>) -> KExpr<T>
+    ): KExpr<T> = transformExprAfterTransformed(
+        expr,
+        dependency0,
+        dependency1,
+        dependency2,
+        dependency3
+    ) { arg0, arg1, arg2, arg3 ->
+        val transformed = transformer(arg0, arg1, arg2, arg3)
+        val sizeBits = rewriter.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
+        require(transformed.sort is KIntSort)
+        transformIfOverflow(transformed.uncheckedCast(), sizeBits).uncheckedCast()
+    }
+
     private inline fun <T : KSort, B : KSort> transformExprAfterTransformedOverflow(
         expr: KExpr<T>,
         dependencies: List<KExpr<B>>,
@@ -140,10 +212,19 @@ class KBv2IntOverflowChecker private constructor(
     }
 
     companion object {
-        fun <T : KSort> overflowCheck(
-            expr: KExpr<T>,
+        fun overflowCheck(
+            expr: KExpr<KBoolSort>,
             model: KModel,
             rewriter: KBv2IntRewriter
-        ): KExpr<T> = KBv2IntOverflowChecker(expr.ctx, model, rewriter).apply(expr)
+        ): KExpr<KBoolSort>? = with(expr.ctx) {
+            val checker = KBv2IntOverflowChecker(expr.ctx, model, rewriter)
+            val transformed = checker.apply(expr)
+
+            return if (checker.flag) {
+                transformed and mkAnd(checker.boundLemmas)
+            } else {
+                null
+            }
+        }
     }
 }

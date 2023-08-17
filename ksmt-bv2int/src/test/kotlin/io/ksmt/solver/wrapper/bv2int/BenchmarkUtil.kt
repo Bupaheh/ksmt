@@ -27,15 +27,25 @@ fun KContext.generateRandomExpressions(
     params: GenerationParameters,
     random: Random,
     isVerbose: Boolean = false,
-    weights: Map<String, Double> = mapOf()
+    weights: Map<String, Double> = mapOf(),
+    predicate: (KExpr<KBoolSort>) -> Boolean = { true }
 ): List<KExpr<KBoolSort>> = List(size) {
     if (isVerbose) println("$it/$size")
-    RandomExpressionGenerator().generate(
-        batchSize,
-        this,
-        params = params,
-        random = random,
-        generatorFilter = ::bv2IntBenchmarkGeneratorFilter,
-        weights = weights
-    ).last { it.sort is KBoolSort && it !is KConst<*> && it !is KInterpretedValue<*> }
+    while (true) {
+        val expr = try {
+            RandomExpressionGenerator().generate(
+                batchSize,
+                this,
+                params = params,
+                random = random,
+                generatorFilter = ::bv2IntBenchmarkGeneratorFilter,
+                weights = weights
+            ).last { expr ->
+                expr.sort is KBoolSort && expr !is KConst<*>
+                        && expr !is KInterpretedValue<*> && predicate(expr.uncheckedCast())
+            }
+        } catch (_: Exception) { continue }
+
+        return@List expr
+    }
 }.uncheckedCast()
