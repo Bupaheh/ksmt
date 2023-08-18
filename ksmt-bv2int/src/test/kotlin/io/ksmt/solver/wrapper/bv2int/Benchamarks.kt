@@ -43,19 +43,35 @@ private data class MeasureAssertTimeResult(val nanoTime: Long, val status: KSolv
     override fun toString(): String = "$status ${nanoTime / 1e6} $roundCnt"
 }
 
-private fun KContext.measureAssertTime(expr: KExpr<KBoolSort>, solverDescription: Solver): MeasureAssertTimeResult {
-    val resTime: Long
+enum class TimerMode {
+    CHECK_TIME,
+    ASSERT_TIME;
+
+    override fun toString(): String =
+        when (this) {
+            CHECK_TIME -> "CT"
+            ASSERT_TIME -> "AT"
+        }
+}
+
+private fun KContext.measureAssertTime(
+    expr: KExpr<KBoolSort>,
+    solverDescription: Solver,
+    timerMode: TimerMode
+): MeasureAssertTimeResult {
     var status: KSolverStatus
     val solver = solverDescription.construct(this)
 
     solver.resetCheckTime()
-    val time = measureNanoTime {
+    val assertTime = measureNanoTime {
         solver.assert(expr)
         status = solver.check(2.seconds)
     }
 
-//    resTime = solver.getCheckTime()
-    resTime = time
+    val resTime = when (timerMode) {
+        TimerMode.CHECK_TIME -> solver.getCheckTime()
+        TimerMode.ASSERT_TIME -> assertTime
+    }
 
     solver.close()
 
@@ -66,13 +82,14 @@ private fun KContext.runBenchmark(
     outputFile: File,
     solver: Solver,
     expressions: List<Pair<Int, KExpr<KBoolSort>>>,
-    repeatNum: Int
+    repeatNum: Int,
+    timerMode: TimerMode
 ) {
     expressions.forEach { (exprId, expr) ->
         repeat(repeatNum) { repeatIdx ->
             println("$exprId\t$repeatIdx")
 
-            val res = measureAssertTime(expr, solver)
+            val res = measureAssertTime(expr, solver, timerMode)
 
             println(res)
             outputFile.appendText("$exprId,$repeatIdx,$solver,${res.status},${res.nanoTime},${res.roundCnt}\n")
@@ -80,16 +97,6 @@ private fun KContext.runBenchmark(
             if (res.status == KSolverStatus.UNKNOWN) return@forEach
         }
     }
-}
-
-fun KContext.readSFormulas(): List<KExpr<KBoolSort>> {
-    val expressions = mutableListOf<KExpr<KBoolSort>>()
-
-    for (i in 45500..45930) {
-        expressions.addAll(readFormulas(File("generatedExpressions/formulas/f-$i.bin")))
-    }
-
-    return expressions
 }
 
 class Solver(
@@ -156,7 +163,7 @@ class Solver(
 val exprsToCheck = mutableListOf(0, 27, 31, 50, 59, 76, 88, 89, 117, 127, 132, 134, 138, 147, 153, 166)
 // lia
 
-fun runDirBenchmark(paths: List<String>, solvers: List<Solver>, resPath: String) {
+fun runDirBenchmark(paths: List<String>, solvers: List<Solver>, resPath: String, timerMode: TimerMode) {
     for (solver in solvers) {
         var cnt = 121
 
@@ -171,7 +178,8 @@ fun runDirBenchmark(paths: List<String>, solvers: List<Solver>, resPath: String)
                 outputFile = File("benchmarkResults/$resPath.csv"),
                 solver = solver,
                 expressions = expressions,
-                repeatNum = 1
+                repeatNum = 1,
+                timerMode = timerMode
             )
 
             println(exprsToCheck)
@@ -182,18 +190,14 @@ fun runDirBenchmark(paths: List<String>, solvers: List<Solver>, resPath: String)
 
 
 fun main() {
+    val timerMode = TimerMode.CHECK_TIME
+    val expressionsFileName = "QF_BV_05wlia"
     val solvers = listOf(
-//        Solver(Solver.InnerSolver.CVC5),
-//        Solver(Solver.InnerSolver.Yices),
 //        Solver(Solver.InnerSolver.Z3),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
-        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_NO_OVERFLOW),
-//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_NO_OVERFLOW),
-//        Solver(Solver.InnerSolver.Bitwuzla)
-//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, AndRewriteMode.SUM),
-//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, AndRewriteMode.BITWISE)
+        Solver(Solver.InnerSolver.Yices, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED)
     )
 
 //    val prefix = "QF_BV_lia"
@@ -203,25 +207,26 @@ fun main() {
 //    return
 
     val ctx = KContext()
-    val expressionsFileName = "1Salia"
     val expressions = ctx.readFormulas(File("generatedExpressions/$expressionsFileName"))
         .mapIndexed { id, expr -> id to expr }
-        .filter { (id, _) -> id < 1000 }
+        .filter { (id, _) -> id in 0..1000 }
 
-    ctx.runBenchmark(
-        outputFile = File("benchmarkResults/trash.csv"),
-        solver = Solver(Solver.InnerSolver.Z3),
-        expressions = expressions.take(200),
-        repeatNum = 3
-    )
+//    ctx.runBenchmark(
+//        outputFile = File("benchmarkResults/trash.csv"),
+//        solver = Solver(Solver.InnerSolver.Z3),
+//        expressions = expressions.take(200),
+//        repeatNum = 3,
+//        timerMode = timerMode
+//    )
 
 
     for (solver in solvers) {
         ctx.runBenchmark(
-            outputFile = File("benchmarkResults/${expressionsFileName}AT.csv"),
+            outputFile = File("benchmarkResults/$expressionsFileName$timerMode.csv"),
             solver = solver,
             expressions = expressions,
-            repeatNum = 3
+            repeatNum = 3,
+            timerMode = timerMode
         )
     }
 }

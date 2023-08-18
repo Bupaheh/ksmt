@@ -198,7 +198,6 @@ class KBv2IntRewriter(
     private val powerOfTwoMaxArg = hashMapOf<KExpr<*>, Long>()
 
     private val isLazyOverflow: Boolean = signednessMode != SignednessMode.UNSIGNED
-    private val overflowSizeBits = hashMapOf<KExpr<KIntSort>, UInt>()
 
     private val lemmas = hashMapOf<KExpr<*>, KExpr<KBoolSort>>()
     private val bvAndLemmas = hashMapOf<KExpr<*>, KExpr<KBoolSort>>()
@@ -228,12 +227,6 @@ class KBv2IntRewriter(
             decl.sort.tryRewriteSort(),
             decl.argSorts.map { it.tryRewriteSort() }
         ).also { bv2IntContext.saveDecl(decl, it, signedness) }
-    }
-
-    fun getOverflowSizeBits(expr: KExpr<KIntSort>) = overflowSizeBits[expr]
-
-    fun setOverflowSizeBits(expr: KExpr<KIntSort>, sizeBits: UInt) {
-        overflowSizeBits[expr] = sizeBits
     }
 
     private fun KExpr<*>.getPowerOfTwoMaxArg() = powerOfTwoMaxArg.getOrDefault(tryUnwrap(), -1L)
@@ -1642,7 +1635,7 @@ class KBv2IntRewriter(
         if (signednessMode == SignednessMode.SIGNED_NO_OVERFLOW) {
             expr.tryAddBoundLemmas(sort)
         } else {
-            setOverflowSizeBits(expr.uncheckedCast(), sort.sizeBits)
+            bv2IntContext.setOverflowSizeBits(expr.uncheckedCast(), sort.sizeBits)
         }
     }
 

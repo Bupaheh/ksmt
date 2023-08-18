@@ -168,7 +168,7 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
 
             var correctModel = true
             val exprs = currentAssertedExprs.map { expr ->
-                val transformed = KBv2IntOverflowChecker.overflowCheck(expr, model, rewriter) ?: expr
+                val transformed = KBv2IntOverflowChecker.overflowCheck(expr, model, bv2IntContext) ?: expr
                 correctModel = correctModel && transformed == expr
                 if (transformed != expr) {
                     originalExpressions[transformed] = originalExpressions[expr] ?: error("Unexpected")

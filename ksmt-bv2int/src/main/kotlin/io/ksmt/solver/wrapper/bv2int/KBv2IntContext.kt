@@ -3,6 +3,7 @@ package io.ksmt.solver.wrapper.bv2int
 import io.ksmt.KContext
 import io.ksmt.decl.KDecl
 import io.ksmt.expr.KExpr
+import io.ksmt.sort.KBoolSort
 import io.ksmt.sort.KIntSort
 import io.ksmt.sort.KSort
 import io.ksmt.utils.uncheckedCast
@@ -14,6 +15,7 @@ class KBv2IntContext(ctx: KContext) {
     private val declarations = hashMapOf<KDecl<*>, KDecl<*>>()
     private val auxDecls = hashSetOf<KDecl<*>>(bvAndFunc, powerOfTwoFunc)
     private val declSignedness = hashMapOf<KDecl<*>, KBv2IntRewriter.Signedness>()
+    private val overflowSizeBits = hashMapOf<KExpr<KIntSort>, UInt>()
 
     fun saveDecl(originalDecl: KDecl<*>, rewrittenDecl: KDecl<*>, signedness: KBv2IntRewriter.Signedness) {
         declSignedness[rewrittenDecl] = signedness
@@ -27,5 +29,11 @@ class KBv2IntContext(ctx: KContext) {
 
     fun mkPowerOfTwoApp(power: KExpr<KIntSort>): KExpr<KIntSort> = powerOfTwoFunc.apply(listOf(power))
     fun mkBvAndApp(arg0: KExpr<KIntSort>, arg1: KExpr<KIntSort>) = bvAndFunc.apply(listOf(arg0, arg1))
+
+    fun getOverflowSizeBits(expr: KExpr<KIntSort>) = overflowSizeBits[expr]
+
+    fun setOverflowSizeBits(expr: KExpr<KIntSort>, sizeBits: UInt) {
+        overflowSizeBits[expr] = sizeBits
+    }
 
 }

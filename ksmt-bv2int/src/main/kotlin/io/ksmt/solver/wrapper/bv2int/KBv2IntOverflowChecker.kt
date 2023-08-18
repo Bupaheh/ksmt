@@ -34,7 +34,7 @@ import java.math.BigInteger
 class KBv2IntOverflowChecker private constructor(
     ctx: KContext,
     private val model: KModel,
-    private val rewriter: KBv2IntRewriter
+    private val bv2IntContext: KBv2IntContext
 ) : KNonRecursiveTransformer(ctx) {
     private var flag = false
     private val boundLemmas = mutableListOf<KExpr<KBoolSort>>()
@@ -117,7 +117,7 @@ class KBv2IntOverflowChecker private constructor(
             val integerValue = value.bigIntegerValue
 
             if (integerValue in lowerBound..upperBound) {
-                rewriter.setOverflowSizeBits(expr, sizeBits)
+                bv2IntContext.setOverflowSizeBits(expr, sizeBits)
                 return expr
             }
         }
@@ -139,7 +139,7 @@ class KBv2IntOverflowChecker private constructor(
         transformer: () -> KExpr<T>
     ): KExpr<T> {
         val transformed = transformer()
-        val sizeBits = rewriter.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
+        val sizeBits = bv2IntContext.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
         require(transformed.sort is KIntSort)
         return transformIfOverflow(transformed.uncheckedCast(), sizeBits).uncheckedCast()
     }
@@ -150,7 +150,7 @@ class KBv2IntOverflowChecker private constructor(
         transformer: (KExpr<B>) -> KExpr<T>
     ): KExpr<T> = transformExprAfterTransformed(expr, dependency) { arg ->
         val transformed = transformer(arg)
-        val sizeBits = rewriter.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
+        val sizeBits = bv2IntContext.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
         require(transformed.sort is KIntSort)
         transformIfOverflow(transformed.uncheckedCast(), sizeBits).uncheckedCast()
     }
@@ -162,7 +162,7 @@ class KBv2IntOverflowChecker private constructor(
         transformer: (KExpr<B0>, KExpr<B1>) -> KExpr<T>
     ): KExpr<T> = transformExprAfterTransformed(expr, dependency0, dependency1) { arg0, arg1 ->
         val transformed = transformer(arg0, arg1)
-        val sizeBits = rewriter.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
+        val sizeBits = bv2IntContext.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
         require(transformed.sort is KIntSort)
         transformIfOverflow(transformed.uncheckedCast(), sizeBits).uncheckedCast()
     }
@@ -175,7 +175,7 @@ class KBv2IntOverflowChecker private constructor(
         transformer: (KExpr<B0>, KExpr<B1>, KExpr<B2>) -> KExpr<T>
     ): KExpr<T> = transformExprAfterTransformed(expr, dependency0, dependency1, dependency2) { arg0, arg1, arg2 ->
         val transformed = transformer(arg0, arg1, arg2)
-        val sizeBits = rewriter.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
+        val sizeBits = bv2IntContext.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
         require(transformed.sort is KIntSort)
         transformIfOverflow(transformed.uncheckedCast(), sizeBits).uncheckedCast()
     }
@@ -195,7 +195,7 @@ class KBv2IntOverflowChecker private constructor(
         dependency3
     ) { arg0, arg1, arg2, arg3 ->
         val transformed = transformer(arg0, arg1, arg2, arg3)
-        val sizeBits = rewriter.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
+        val sizeBits = bv2IntContext.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
         require(transformed.sort is KIntSort)
         transformIfOverflow(transformed.uncheckedCast(), sizeBits).uncheckedCast()
     }
@@ -206,7 +206,7 @@ class KBv2IntOverflowChecker private constructor(
         transformer: (List<KExpr<B>>) -> KExpr<T>
     ): KExpr<T> = transformExprAfterTransformed(expr, dependencies) { args ->
         val transformed = transformer(args)
-        val sizeBits = rewriter.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
+        val sizeBits = bv2IntContext.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
         require(transformed.sort is KIntSort)
         transformIfOverflow(transformed.uncheckedCast(), sizeBits).uncheckedCast()
     }
@@ -215,9 +215,9 @@ class KBv2IntOverflowChecker private constructor(
         fun overflowCheck(
             expr: KExpr<KBoolSort>,
             model: KModel,
-            rewriter: KBv2IntRewriter
+            bv2IntContext: KBv2IntContext
         ): KExpr<KBoolSort>? = with(expr.ctx) {
-            val checker = KBv2IntOverflowChecker(expr.ctx, model, rewriter)
+            val checker = KBv2IntOverflowChecker(expr.ctx, model, bv2IntContext)
             val transformed = checker.apply(expr)
 
             return if (checker.flag) {
