@@ -9,6 +9,7 @@ import io.ksmt.runner.serializer.AstSerializationCtx
 import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3SMTLibParser
 import io.ksmt.sort.KBoolSort
+import io.ksmt.test.GenerationParameters
 import io.ksmt.utils.getValue
 import io.ksmt.utils.mkConst
 import io.ksmt.utils.uncheckedCast
@@ -57,7 +58,7 @@ val shiftDecls = setOf(
 
 val allDecls = generalDecls + liaDecls + niaDecls + setOf("zero_extend", "sign_extend")
 
-private fun countOperations(decls: HashMap<String, Int>, operations: Set<String>): Int {
+fun countOperations(decls: HashMap<String, Int>, operations: Set<String>): Int {
     return operations.fold(0) { acc, el -> acc + decls.getOrDefault(el, 0) }
 }
 
@@ -126,16 +127,16 @@ fun testYices() = with(KContext()) {
 
 
 
-fun main() {
-    testYices()
-    return
-    val ctx = KContext()
-    val expressions = ctx.readFormulas(File("generatedExpressions/QF_BV_05wlia"))
-    val rewriter = KUnsignedToSignedBvRewriter(ctx)
-
-    val signedExpressions = expressions.map { rewriter.apply(it) }
-
-    writeExpressions(ctx, signedExpressions, "generatedExpressions/QF_BV_swlia")
+fun main() = with(KContext()) {
+//    testYices()
+//    return
+//    val ctx = KContext()
+//    val expressions = ctx.readFormulas(File("generatedExpressions/QF_BV_05wlia"))
+//    val rewriter = KUnsignedToSignedBvRewriter(ctx)
+//
+//    val signedExpressions = expressions.map { rewriter.apply(it) }
+//
+//    writeExpressions(ctx, signedExpressions, "generatedExpressions/QF_BV_swlia")
 
 
 
@@ -165,42 +166,41 @@ fun main() {
 //        writeExpressions(ctx, exprs, "generatedExpressions/wnia/QF_BV_wnia$i")
 //    }
 
-
-//    val params = GenerationParameters(
-//        seedExpressionsPerSort = 20,
-//        possibleIntValues = 2..64,
-//        deepExpressionProbability = 0.3,
-//        generatedListSize = 2..3,
-//        astFilter = Bv2IntAstFilter()
-//    )
-//    val weights = Bv2IntBenchmarkWeightBuilder()
-//        .enableBvCmp(3.7)
-//        .setWeight("mkBvUnsignedGreaterExpr", 0.3)
-//        .setWeight("mkBvUnsignedGreaterOrEqualExpr", 0.3)
-//        .setWeight("mkBvUnsignedLessExpr", 0.3)
-//        .setWeight("mkBvUnsignedLessOrEqualExpr", 0.3)
-//        .enableBvLia(10.0)
-////        .enableBvNia(0.65)
+    val params = GenerationParameters(
+        seedExpressionsPerSort = 20,
+        possibleIntValues = 2..64,
+        deepExpressionProbability = 0.3,
+        generatedListSize = 2..3,
+        astFilter = Bv2IntAstFilter()
+    )
+    val weights = Bv2IntBenchmarkWeightBuilder()
+        .enableBvCmp(3.7)
+        .setWeight("mkBvUnsignedGreaterExpr", 0.3)
+        .setWeight("mkBvUnsignedGreaterOrEqualExpr", 0.3)
+        .setWeight("mkBvUnsignedLessExpr", 0.3)
+        .setWeight("mkBvUnsignedLessOrEqualExpr", 0.3)
+        .enableBvLia(10.0)
+        .enableBvNia(0.65)
 //        .enableArray(1.25)
 //        .enableBvBitwise(0.25)
-////        .enableBvWeird(0.875)
-////        .enableBvShift(1.0)
-//        .build()
-//    // mkBvSort disabled
-//    val expressions = generateRandomExpressions(
-//        size = 10000,
-//        batchSize = 1000,
-//        params = params,
-//        random = Random(55),
-//        weights = weights,
-//        isVerbose = true,
-//        predicate = { expr ->
-//            bitwiseDecls.any { decl ->
-//                KDeclCounter(this).countDeclarations(expr).getOrDefault(decl, 0) > 0
-//            }
-//        }
-//    )
-//
-//
-//    writeExpressions(this, expressions, "generatedExpressions/1Sablia")
+//        .enableBvWeird(0.875)
+//        .enableBvShift(1.0)
+        .build()
+    // mkBvSort disabled
+    val expressions = generateRandomExpressions(
+        size = 5000,
+        batchSize = 1000,
+        params = params,
+        random = Random(55),
+        weights = weights,
+        isVerbose = true,
+        predicate = { expr ->
+            niaDecls.any { decl ->
+                KDeclCounter(this).countDeclarations(expr).getOrDefault(decl, 0) > 0
+            }
+        }
+    )
+
+
+    writeExpressions(this, expressions, "generatedExpressions/1Snia")
 }

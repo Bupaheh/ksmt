@@ -3,6 +3,8 @@ package io.ksmt.solver.wrapper.bv2int
 import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
+import com.sri.yices.Terms
+import com.sri.yices.Types
 import io.ksmt.KContext
 import io.ksmt.expr.KExpr
 import io.ksmt.runner.serializer.AstSerializationCtx
@@ -17,6 +19,7 @@ import io.ksmt.utils.uncheckedCast
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.RewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.AndRewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode
+import io.ksmt.utils.mkConst
 import java.io.File
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration.Companion.seconds
@@ -73,9 +76,11 @@ private fun KContext.measureAssertTime(
         TimerMode.ASSERT_TIME -> assertTime
     }
 
+    val roundCnt = if (solver is KBv2IntSolver) solver.roundCount else 1
+
     solver.close()
 
-    return MeasureAssertTimeResult(resTime, status, solver.roundCount)
+    return MeasureAssertTimeResult(resTime, status, roundCnt)
 }
 
 private fun KContext.runBenchmark(
@@ -128,11 +133,18 @@ class Solver(
             }
     }
 
-    fun construct(ctx: KContext): KSolver<*> {
+    fun construct(ctx: KContext): KSolver<*>  = with(ctx) {
         val innerSolver = solver.construct(ctx)
+        if (innerSolver is KZ3Solver) {
+            innerSolver.push()
+            innerSolver.assert(boolSort.mkConst("a"))
+            innerSolver.check()
+            innerSolver.pop()
+            innerSolver.resetCheckTime()
+        }
         if (rewriteMode == null) return innerSolver
 
-        return KBv2IntSolver(ctx, innerSolver, rewriteMode, andRewriteMode, signednessMode)
+        KBv2IntSolver(ctx, innerSolver, rewriteMode, andRewriteMode, signednessMode)
     }
 
     override fun toString(): String {
@@ -151,9 +163,9 @@ class Solver(
 
         suffix += when (signednessMode) {
             SignednessMode.UNSIGNED -> ""
-            SignednessMode.SIGNED_LAZY_OVERFLOW -> "-Signed"
-            SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedNoBounds"
-            SignednessMode.SIGNED_NO_OVERFLOW -> "-SignedNoOverflow"
+            SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedGuardsCmp2"
+            SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedNoBoundsOneRoundGuardsCmp2"
+            SignednessMode.SIGNED_UNSAT_TEST -> "-SignedUnsatTestingGuardsCmp2"
         }
 
         return prefix + innerSolver + suffix
@@ -191,13 +203,21 @@ fun runDirBenchmark(paths: List<String>, solvers: List<Solver>, resPath: String,
 
 fun main() {
     val timerMode = TimerMode.CHECK_TIME
-    val expressionsFileName = "QF_BV_05wlia"
+    val expressionsFileName = "1Snia"
     val solvers = listOf(
-//        Solver(Solver.InnerSolver.Z3),
+//        Solver(Solver.InnerSolver.Bitwuzla),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
-//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_NO_OVERFLOW),
-        Solver(Solver.InnerSolver.Yices, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED)
+//        Solver(Solver.InnerSolver.CVC5),
+//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_NO_OVERFLOW),
+//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS),
+        Solver(Solver.InnerSolver.CVC5),
+//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED),
+        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS),
+//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_UNSAT_TEST),
+//        Solver(Solver.InnerSolver.Yices),
+//        Solver(Solver.InnerSolver.Yices)
     )
 
 //    val prefix = "QF_BV_lia"
@@ -209,20 +229,23 @@ fun main() {
     val ctx = KContext()
     val expressions = ctx.readFormulas(File("generatedExpressions/$expressionsFileName"))
         .mapIndexed { id, expr -> id to expr }
-        .filter { (id, _) -> id in 0..1000 }
+        .filter { (id, _) -> id in 0..200 }
+//        .filter { (id, _) -> id !in listOf(319) }
 
 //    ctx.runBenchmark(
 //        outputFile = File("benchmarkResults/trash.csv"),
 //        solver = Solver(Solver.InnerSolver.Z3),
-//        expressions = expressions.take(200),
+//        expressions = expressions.take(100),
 //        repeatNum = 3,
 //        timerMode = timerMode
 //    )
+//
+//    return
 
 
     for (solver in solvers) {
         ctx.runBenchmark(
-            outputFile = File("benchmarkResults/$expressionsFileName$timerMode.csv"),
+            outputFile = File("benchmarkResults/$expressionsFileName${timerMode}Pres.csv"),
             solver = solver,
             expressions = expressions,
             repeatNum = 3,

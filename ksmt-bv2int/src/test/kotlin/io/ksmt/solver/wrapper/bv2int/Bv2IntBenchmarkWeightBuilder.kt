@@ -97,13 +97,13 @@ class Bv2IntBenchmarkWeightBuilder(private val defaultWeight: Double = 1.0) {
         )
 
         private val bvBitwiseGenerators = listOf(
-            "mkBvNotExpr",
+//            "mkBvNotExpr",
             "mkBvAndExpr",
-            "mkBvOrExpr",
-            "mkBvXorExpr",
-            "mkBvXNorExpr",
-            "mkBvNAndExpr",
-            "mkBvNorExpr",
+//            "mkBvOrExpr",
+//            "mkBvXorExpr",
+//            "mkBvXNorExpr",
+//            "mkBvNAndExpr",
+//            "mkBvNorExpr",
         )
 
         private val bvShiftGenerators = listOf(
