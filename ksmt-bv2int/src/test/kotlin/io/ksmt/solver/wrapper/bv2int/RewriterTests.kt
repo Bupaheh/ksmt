@@ -8,6 +8,7 @@ import io.ksmt.expr.KQuantifier
 import io.ksmt.expr.rewrite.KExprUninterpretedDeclCollector
 import io.ksmt.solver.KSolverStatus
 import io.ksmt.solver.runner.KSolverRunnerManager
+import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.sort.KBoolSort
 import io.ksmt.sort.KSort
@@ -40,7 +41,7 @@ class RewriterTests {
             exprs.forEachIndexed { i, expr ->
                 println("$i/${exprs.size - 1}")
 
-                solverManager.createSolver(this, KZ3Solver::class).use { innerSolver ->
+                solverManager.createSolver(this, KYicesSolver::class).use { innerSolver ->
                     val solver = KBv2IntSolver(
                         this,
                         innerSolver,
@@ -50,7 +51,7 @@ class RewriterTests {
                     )
                     solver.assert(expr)
 
-                    val status = solver.check(3.seconds)
+                    val status = solver.check(2.seconds)
 
                     if (status == KSolverStatus.UNKNOWN) {
                         println("Timeout")
@@ -73,7 +74,11 @@ class RewriterTests {
         println("${timeoutCnt.toDouble() / exprs.size} timeout percentage")
     }
 
-    private fun KContext.testBv2IntModelConversion(exprs: List<KExpr<KBoolSort>>, mode: KBv2IntRewriter.AndRewriteMode) {
+    private fun KContext.testBv2IntModelConversion(
+        exprs: List<KExpr<KBoolSort>>,
+        mode: KBv2IntRewriter.AndRewriteMode,
+        signednessMode: KBv2IntRewriter.SignednessMode
+    ) {
         var satCnt = 0
         var timeoutCnt = 0
 
@@ -150,6 +155,19 @@ class RewriterTests {
         return expr.args.map { it.depth() }.max() + 1
     }
 
+
+    fun KContext.testing(expr: KExpr<KBoolSort>) {
+        val innerSolver = KZ3Solver(this)
+        KBv2IntSolver(
+            this,
+            innerSolver,
+            signednessMode = KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+        ).use { solver ->
+            solver.assert(expr)
+            solver.check()
+        }
+    }
+
     @Test
     fun testInt2BvModelConversion() = with(KContext()) {
         val params = GenerationParameters(
@@ -163,22 +181,25 @@ class RewriterTests {
             .enableBvCmp(5.0)
             .enableBvLia(10.0)
 //            .enableBvWeird(2.0)
-            .enableBvBitwise(0.5)
+            .enableBvBitwise(3.5)
             .build()
         val expressions = generateRandomExpressions(
-            size = 2000,
-            batchSize = 300,
+            size = 1000,
+            batchSize = 500,
             params = params,
-            random = Random(4),
+            random = Random(8),
             weights = weights,
             isVerbose = true
-        )
+        ) { expr ->
+            val decls = KDeclCounter(this).countDeclarations(expr)
+            countOperations(decls, bitwiseDecls) > 0
+        }
 
         testInt2BvModelConversion(
             expressions,
-            KBv2IntRewriter.RewriteMode.EAGER,
-            KBv2IntRewriter.AndRewriteMode.BITWISE,
-            KBv2IntRewriter.SignednessMode.UNSIGNED
+            KBv2IntRewriter.RewriteMode.LAZY,
+            KBv2IntRewriter.AndRewriteMode.SUM,
+            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS
         )
     }
 
@@ -195,18 +216,25 @@ class RewriterTests {
             .enableBvCmp(5.0)
             .enableBvLia(10.0)
 //            .enableBvWeird(2.0)
-            .enableBvBitwise(0.5)
+            .enableBvBitwise(3.5)
             .build()
         val expressions = generateRandomExpressions(
-            size = 2000,
-            batchSize = 300,
+            size = 1000,
+            batchSize = 500,
             params = params,
-            random = Random(5),
+            random = Random(4),
             weights = weights,
             isVerbose = true
-        )
+        ) { expr ->
+            val decls = KDeclCounter(this).countDeclarations(expr)
+            countOperations(decls, bitwiseDecls) > 0
+        }
 
-        testBv2IntModelConversion(expressions, KBv2IntRewriter.AndRewriteMode.BITWISE)
+        testBv2IntModelConversion(
+            expressions,
+            KBv2IntRewriter.AndRewriteMode.SUM,
+            KBv2IntRewriter.SignednessMode.SIGNED_UNSAT_TEST
+        )
     }
 
 }

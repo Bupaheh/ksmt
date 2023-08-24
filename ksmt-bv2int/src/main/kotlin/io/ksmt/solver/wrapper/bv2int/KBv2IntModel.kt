@@ -16,8 +16,7 @@ import io.ksmt.utils.uncheckedCast
 class KBv2IntModel(
     private val ctx: KContext,
     private val bv2IntContext: KBv2IntContext,
-    private val model: KModel,
-    private val rewriter: KBv2IntRewriter
+    private val model: KModel
 ) : KModel {
     override val declarations: Set<KDecl<*>> by lazy {
         model.declarations
@@ -26,6 +25,7 @@ class KBv2IntModel(
             .toSet()
     }
 
+    private val interpretations = hashMapOf<KDecl<*>, KFuncInterp<*>?>()
     override val uninterpretedSorts: Set<KUninterpretedSort>
         get() = model.uninterpretedSorts
 
@@ -39,18 +39,19 @@ class KBv2IntModel(
         return evaluator.apply(expr)
     }
 
-    override fun <T : KSort> interpretation(decl: KDecl<T>): KFuncInterp<T>? {
-        val rewrittenDecl = rewriter.rewriteDecl(decl)
-        val interpretation = model.interpretation(rewrittenDecl) ?: return null
+    override fun <T : KSort> interpretation(decl: KDecl<T>): KFuncInterp<T>? =
+        interpretations.getOrPut(decl) {
+            val rewrittenDecl = bv2IntContext.cachedDecl(decl) ?: return null
+            val interpretation = model.interpretation(rewrittenDecl) ?: return null
 
-        if (rewrittenDecl == decl) return interpretation.uncheckedCast()
+            if (rewrittenDecl == decl) return interpretation.uncheckedCast()
 
-        if (interpretation.entries.isNotEmpty()) TODO()
+            if (interpretation.entries.isNotEmpty()) TODO()
 
-        val default = interpretation.default?.let { KBv2IntConverter(ctx).convertExpr(it, decl.sort) }
+            val default = interpretation.default?.let { KBv2IntConverter(ctx).convertExpr(it, decl.sort) }
 
-        return KFuncInterpVarsFree(decl, listOf(), default)
-    }
+            return KFuncInterpVarsFree(decl, listOf(), default)
+        }.uncheckedCast()
 
     override fun uninterpretedSortUniverse(sort: KUninterpretedSort): Set<KUninterpretedSortValue>? =
         model.uninterpretedSortUniverse(sort)

@@ -156,13 +156,18 @@ class KImportantAppCollector private constructor(
 
     companion object {
         fun collectImportantApps(
-            expr: KExpr<KBoolSort>,
+            exprs: List<KExpr<KBoolSort>>,
             model: KModel,
             bv2intContext: KBv2IntContext
         ): Set<KExpr<*>> {
-            val collector = KImportantAppCollector(expr.ctx, model, bv2intContext)
-            collector.importantExprs.add(expr)
-            collector.apply(expr)
+            if (exprs.isEmpty()) return emptySet()
+
+            val collector = KImportantAppCollector(exprs.first().ctx, model, bv2intContext)
+
+            exprs.forEach { expr ->
+                collector.importantExprs.add(expr)
+                collector.apply(expr)
+            }
             return collector.importantApps
         }
     }

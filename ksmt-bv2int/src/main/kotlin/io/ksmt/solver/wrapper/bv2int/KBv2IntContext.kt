@@ -2,6 +2,7 @@ package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.KContext
 import io.ksmt.decl.KDecl
+import io.ksmt.expr.KAndBinaryExpr
 import io.ksmt.expr.KExpr
 import io.ksmt.sort.KBoolSort
 import io.ksmt.sort.KIntSort
@@ -14,11 +15,10 @@ class KBv2IntContext(ctx: KContext) {
 
     private val declarations = hashMapOf<KDecl<*>, KDecl<*>>()
     private val auxDecls = hashSetOf<KDecl<*>>(bvAndFunc, powerOfTwoFunc)
-    private val declSignedness = hashMapOf<KDecl<*>, KBv2IntRewriter.Signedness>()
     private val overflowSizeBits = hashMapOf<KExpr<KIntSort>, UInt>()
+    private val bvAndLemmaApplication = hashMapOf<KExpr<KBoolSort>, KExpr<KIntSort>>()
 
-    fun saveDecl(originalDecl: KDecl<*>, rewrittenDecl: KDecl<*>, signedness: KBv2IntRewriter.Signedness) {
-        declSignedness[rewrittenDecl] = signedness
+    fun saveDecl(originalDecl: KDecl<*>, rewrittenDecl: KDecl<*>) {
         declarations[originalDecl] = rewrittenDecl
     }
     fun cachedDecl(decl: KDecl<*>): KDecl<KSort>? = declarations[decl].uncheckedCast()
@@ -29,6 +29,16 @@ class KBv2IntContext(ctx: KContext) {
 
     fun mkPowerOfTwoApp(power: KExpr<KIntSort>): KExpr<KIntSort> = powerOfTwoFunc.apply(listOf(power))
     fun mkBvAndApp(arg0: KExpr<KIntSort>, arg1: KExpr<KIntSort>) = bvAndFunc.apply(listOf(arg0, arg1))
+    fun extractBvAndApplication(expr: KExpr<KBoolSort>) = bvAndLemmaApplication[expr]
+
+    fun registerApplication(lemma: KExpr<KBoolSort>, application: KExpr<KIntSort>) {
+        if (lemma !is KAndBinaryExpr) {
+            bvAndLemmaApplication[lemma] = application
+        } else {
+            registerApplication(lemma.lhs, application)
+            registerApplication(lemma.rhs, application)
+        }
+    }
 
     fun getOverflowSizeBits(expr: KExpr<KIntSort>) = overflowSizeBits[expr]
 

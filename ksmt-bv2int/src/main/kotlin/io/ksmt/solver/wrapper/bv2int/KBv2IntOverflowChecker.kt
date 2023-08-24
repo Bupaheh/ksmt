@@ -31,13 +31,22 @@ import io.ksmt.utils.ArithUtils.bigIntegerValue
 import io.ksmt.utils.uncheckedCast
 import java.math.BigInteger
 
-class KBv2IntOverflowChecker private constructor(
+class KBv2IntOverflowChecker constructor(
     ctx: KContext,
     private val model: KModel,
     private val bv2IntContext: KBv2IntContext
 ) : KNonRecursiveTransformer(ctx) {
     private var flag = false
-    private val boundLemmas = mutableListOf<KExpr<KBoolSort>>()
+
+    fun <T : KSort> overflowCheck(expr: KExpr<T>): KExpr<T> {
+        val transformed = apply(expr)
+
+        return if (flag) {
+            transformed
+        } else {
+            expr
+        }
+    }
 
     override fun <T : KSort> transform(expr: KConst<T>): KExpr<T> =
         transformExprAfterTransformedOverflow(expr) { expr }
@@ -124,14 +133,7 @@ class KBv2IntOverflowChecker private constructor(
 
         flag = true
 
-        if (expr is KConst<*> || expr is KFunctionApp<*> || expr is KArraySelectBase<*, *>) {
-            boundLemmas.add(lowerBound.expr le expr)
-            boundLemmas.add(upperBound.expr ge expr)
-
-            expr
-        } else {
-            unsignedToSigned(expr mod mkPowerOfTwoExpr(sizeBits), sizeBits)
-        }
+        unsignedToSigned(expr mod mkPowerOfTwoExpr(sizeBits), sizeBits)
     }
 
     private inline fun <T : KSort> transformExprAfterTransformedOverflow(
@@ -209,22 +211,5 @@ class KBv2IntOverflowChecker private constructor(
         val sizeBits = bv2IntContext.getOverflowSizeBits(expr.uncheckedCast()) ?: return transformed
         require(transformed.sort is KIntSort)
         transformIfOverflow(transformed.uncheckedCast(), sizeBits).uncheckedCast()
-    }
-
-    companion object {
-        fun overflowCheck(
-            expr: KExpr<KBoolSort>,
-            model: KModel,
-            bv2IntContext: KBv2IntContext
-        ): KExpr<KBoolSort>? = with(expr.ctx) {
-            val checker = KBv2IntOverflowChecker(expr.ctx, model, bv2IntContext)
-            val transformed = checker.apply(expr)
-
-            return if (checker.flag) {
-                transformed and mkAnd(checker.boundLemmas)
-            } else {
-                null
-            }
-        }
     }
 }
