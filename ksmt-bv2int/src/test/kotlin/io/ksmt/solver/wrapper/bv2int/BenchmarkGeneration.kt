@@ -36,11 +36,16 @@ val generalDecls = setOf(
 )
 
 val liaDecls = setOf(
-    "bvneg", "bvadd", "bvsub"
+    "bvneg", "bvadd", "bvsub", "bvmulC", "bvudivC", "bvsdivC", "bvuremC", "bvsremC", "bvsmodC"
+)
+
+val newLia = setOf(
+    "bvmulC", "bvudivC", "bvsdivC", "bvuremC", "bvsremC", "bvsmodC"
 )
 
 val weirdDecls = setOf(
-    "zero_extend", "sign_extend", "concat", "extract"
+    "zero_extend", "sign_extend",
+//    "concat", "extract"
 )
 
 val niaDecls = setOf(
@@ -56,7 +61,7 @@ val shiftDecls = setOf(
     "bvshl", "bvlshr", "bvashr"
 )
 
-val allDecls = generalDecls + liaDecls + niaDecls + setOf("zero_extend", "sign_extend")
+val allDecls = generalDecls + liaDecls + weirdDecls
 
 fun countOperations(decls: HashMap<String, Int>, operations: Set<String>): Int {
     return operations.fold(0) { acc, el -> acc + decls.getOrDefault(el, 0) }
@@ -88,18 +93,16 @@ fun readSmtBenchmarkData(
         val niaCnt = countOperations(decls, niaDecls)
         val weirdCnt = countOperations(decls, weirdDecls)
         val shiftCnt = countOperations(decls, shiftDecls)
+
         val flag = decls.keys.all { it in allDecls }
-                && niaCnt > 0
+                && (weirdCnt > 0 && liaCnt * 0.5 > weirdCnt || liaCnt < 1000)
 
         if (flag) {
             expressions.add(expr)
-        } else if (decls.keys.all { it in (allDecls) } && weirdCnt > 0 && niaCnt > 0) {
-            println(weirdCnt.toDouble() / (liaCnt + niaCnt))
-            println(KDeclCounter(ctx).countDeclarations(expr))
         }
 
-        if (expressions.size > limit) {
-            return expressions
+        if (flag && countOperations(decls, newLia) > 0) {
+            println("NEW")
         }
     }
 
@@ -128,8 +131,6 @@ fun testYices() = with(KContext()) {
 
 
 fun main() = with(KContext()) {
-//    testYices()
-//    return
 //    val ctx = KContext()
 //    val expressions = ctx.readFormulas(File("generatedExpressions/QF_BV_05wlia"))
 //    val rewriter = KUnsignedToSignedBvRewriter(ctx)
@@ -138,21 +139,19 @@ fun main() = with(KContext()) {
 //
 //    writeExpressions(ctx, signedExpressions, "generatedExpressions/QF_BV_swlia")
 
+    val ids = 0..92
+    val exprs = mutableListOf<KExpr<KBoolSort>>()
+    val ctx = KContext()
+    for (i in ids) {
+        println(i)
+        val ex = ctx.readFormulas(File("generatedExpressions/wliac/QF_BV_wliac$i"))
+        exprs.addAll(ex)
+    }
+    println(exprs.size)
+    writeExpressions(ctx, exprs, "generatedExpressions/QF_BV_wliac")
 
-
-//    val ids = 0..92
-//    val exprs = mutableListOf<KExpr<KBoolSort>>()
-//    val ctx = KContext()
-//    for (i in ids) {
-//        println(i)
-//        val ex = ctx.readFormulas(File("generatedExpressions/wnia/QF_BV_wnia$i"))
-//        exprs.addAll(ex)
-//    }
-//    println(exprs.size)
-//    writeExpressions(ctx, exprs, "generatedExpressions/QF_BV_wnia")
-//    return
 //
-//    for (i in 40..92) {
+//    for (i in 2..92) {
 //        val ctx = KContext()
 //        val step = 500
 //        val exprs = readSmtBenchmarkData(
@@ -163,44 +162,46 @@ fun main() = with(KContext()) {
 //            limit = 10000
 //        )
 //
-//        writeExpressions(ctx, exprs, "generatedExpressions/wnia/QF_BV_wnia$i")
+//        writeExpressions(ctx, exprs, "generatedExpressions/wliac/QF_BV_wliac$i")
 //    }
+//
+//    return
 
-    val params = GenerationParameters(
-        seedExpressionsPerSort = 20,
-        possibleIntValues = 2..64,
-        deepExpressionProbability = 0.3,
-        generatedListSize = 2..3,
-        astFilter = Bv2IntAstFilter()
-    )
-    val weights = Bv2IntBenchmarkWeightBuilder()
-        .enableBvCmp(3.7)
-        .setWeight("mkBvUnsignedGreaterExpr", 0.3)
-        .setWeight("mkBvUnsignedGreaterOrEqualExpr", 0.3)
-        .setWeight("mkBvUnsignedLessExpr", 0.3)
-        .setWeight("mkBvUnsignedLessOrEqualExpr", 0.3)
-        .enableBvLia(10.0)
-        .enableBvNia(0.65)
-//        .enableArray(1.25)
-//        .enableBvBitwise(0.25)
-//        .enableBvWeird(0.875)
-//        .enableBvShift(1.0)
-        .build()
-    // mkBvSort disabled
-    val expressions = generateRandomExpressions(
-        size = 5000,
-        batchSize = 1000,
-        params = params,
-        random = Random(55),
-        weights = weights,
-        isVerbose = true,
-        predicate = { expr ->
-            niaDecls.any { decl ->
-                KDeclCounter(this).countDeclarations(expr).getOrDefault(decl, 0) > 0
-            }
-        }
-    )
-
-
-    writeExpressions(this, expressions, "generatedExpressions/1Snia")
+//    val params = GenerationParameters(
+//        seedExpressionsPerSort = 20,
+//        possibleIntValues = 2..64,
+//        deepExpressionProbability = 0.3,
+//        generatedListSize = 2..3,
+//        astFilter = Bv2IntAstFilter()
+//    )
+//    val weights = Bv2IntBenchmarkWeightBuilder()
+//        .enableBvCmp(3.7)
+//        .setWeight("mkBvUnsignedGreaterExpr", 0.3)
+//        .setWeight("mkBvUnsignedGreaterOrEqualExpr", 0.3)
+//        .setWeight("mkBvUnsignedLessExpr", 0.3)
+//        .setWeight("mkBvUnsignedLessOrEqualExpr", 0.3)
+//        .enableBvLia(10.0)
+//        .enableBvNia(0.65)
+////        .enableArray(1.25)
+////        .enableBvBitwise(0.25)
+////        .enableBvWeird(0.875)
+////        .enableBvShift(1.0)
+//        .build()
+//    // mkBvSort disabled
+//    val expressions = generateRandomExpressions(
+//        size = 5000,
+//        batchSize = 1000,
+//        params = params,
+//        random = Random(55),
+//        weights = weights,
+//        isVerbose = true,
+//        predicate = { expr ->
+//            niaDecls.any { decl ->
+//                KDeclCounter(this).countDeclarations(expr).getOrDefault(decl, 0) > 0
+//            }
+//        }
+//    )
+//
+//
+//    writeExpressions(this, expressions, "generatedExpressions/1Snia")
 }

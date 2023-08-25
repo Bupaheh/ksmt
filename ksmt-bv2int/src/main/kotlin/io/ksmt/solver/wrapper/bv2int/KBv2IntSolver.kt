@@ -1,7 +1,6 @@
 package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.KContext
-import io.ksmt.expr.KEqExpr
 import io.ksmt.expr.KExpr
 import io.ksmt.expr.KFunctionApp
 import io.ksmt.expr.KIntNumExpr
@@ -46,7 +45,7 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
     private val bv2IntContext = KBv2IntContext(ctx)
     private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, signednessMode)
     private val unsatRewriter by lazy {
-        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, SignednessMode.SIGNED_UNSAT_TEST)
+        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, SignednessMode.SIGNED)
     }
 
     private var currentBvAndLemmas = mutableListOf<KExpr<KBoolSort>>()
@@ -68,7 +67,8 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
 
         currentAssertedExprs.add(rewritten)
 
-        if (signednessMode != SignednessMode.UNSIGNED && signednessMode != SignednessMode.SIGNED_UNSAT_TEST) {
+
+        if (signednessMode != SignednessMode.UNSIGNED && signednessMode != SignednessMode.SIGNED) {
             originalExpressions.add(expr)
         }
 
@@ -120,7 +120,7 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
         while (left.isPositive()) {
             val status = innerCheck(left)
             if (signednessMode == SignednessMode.UNSIGNED ||
-                signednessMode == SignednessMode.SIGNED_UNSAT_TEST ||
+                signednessMode == SignednessMode.SIGNED ||
                 status == KSolverStatus.UNKNOWN ||
                 isUnsatRewriter
             ) {
@@ -128,6 +128,7 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
             }
 
             if (status == KSolverStatus.UNSAT) {
+                roundCount += 100
                 lastUnsatScope = currentScope
                 currentAssertedExprs = originalExpressions.map { expr ->
                     unsatRewriter.rewriteBv2Int(expr).also { rewritten ->

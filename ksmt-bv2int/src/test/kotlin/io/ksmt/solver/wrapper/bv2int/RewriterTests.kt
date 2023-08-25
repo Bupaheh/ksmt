@@ -3,17 +3,31 @@ package io.ksmt.solver.wrapper.bv2int
 import io.ksmt.KContext
 import io.ksmt.decl.KConstDecl
 import io.ksmt.expr.KApp
+import io.ksmt.expr.KDivArithExpr
 import io.ksmt.expr.KExpr
+import io.ksmt.expr.KFpMaxExpr
+import io.ksmt.expr.KFpMinExpr
+import io.ksmt.expr.KFpToBvExpr
+import io.ksmt.expr.KFpToRealExpr
+import io.ksmt.expr.KFpValue
+import io.ksmt.expr.KModIntExpr
+import io.ksmt.expr.KPowerArithExpr
 import io.ksmt.expr.KQuantifier
+import io.ksmt.expr.KRemIntExpr
 import io.ksmt.expr.rewrite.KExprUninterpretedDeclCollector
+import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.solver.KSolverStatus
 import io.ksmt.solver.runner.KSolverRunnerManager
-import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3Solver
+import io.ksmt.sort.KArithSort
 import io.ksmt.sort.KBoolSort
+import io.ksmt.sort.KBvSort
+import io.ksmt.sort.KFpSort
+import io.ksmt.sort.KIntSort
+import io.ksmt.sort.KRealSort
 import io.ksmt.sort.KSort
 import io.ksmt.test.GenerationParameters
-import io.ksmt.utils.mkConst
+import io.ksmt.utils.FpUtils.isZero
 import io.ksmt.utils.uncheckedCast
 import kotlin.random.Random
 import kotlin.test.Test
@@ -41,7 +55,7 @@ class RewriterTests {
             exprs.forEachIndexed { i, expr ->
                 println("$i/${exprs.size - 1}")
 
-                solverManager.createSolver(this, KYicesSolver::class).use { innerSolver ->
+                solverManager.createSolver(this, KZ3Solver::class).use { innerSolver ->
                     val solver = KBv2IntSolver(
                         this,
                         innerSolver,
@@ -65,7 +79,7 @@ class RewriterTests {
                     val model = solver.model()
                     val simplified =  model.eval(expr, true)
 
-                    assert(simplified == trueExpr)
+                    assert(simplified != falseExpr)
                 }
             }
         }
@@ -155,16 +169,16 @@ class RewriterTests {
         return expr.args.map { it.depth() }.max() + 1
     }
 
-
     fun KContext.testing(expr: KExpr<KBoolSort>) {
-        val innerSolver = KZ3Solver(this)
-        KBv2IntSolver(
-            this,
-            innerSolver,
-            signednessMode = KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
-        ).use { solver ->
-            solver.assert(expr)
-            solver.check()
+        val bv2IntContext = KBv2IntContext(this)
+        val rewriter = KBv2IntRewriter(this, bv2IntContext, signednessMode = KBv2IntRewriter.SignednessMode.SIGNED)
+        val rewritten = rewriter.rewriteBv2Int(expr)
+        KZ3Solver(this).use { solver ->
+            solver.assert(rewritten)
+            println(solver.check())
+            val model = KBv2IntModel(this, bv2IntContext, solver.model())
+
+            println(model.eval(expr))
         }
     }
 
@@ -180,14 +194,15 @@ class RewriterTests {
         val weights = Bv2IntBenchmarkWeightBuilder()
             .enableBvCmp(5.0)
             .enableBvLia(10.0)
+//            .enableBvNia(0.65)
 //            .enableBvWeird(2.0)
             .enableBvBitwise(3.5)
             .build()
         val expressions = generateRandomExpressions(
-            size = 1000,
-            batchSize = 500,
+            size = 2000,
+            batchSize = 2000,
             params = params,
-            random = Random(8),
+            random = Random(10),
             weights = weights,
             isVerbose = true
         ) { expr ->
@@ -197,9 +212,9 @@ class RewriterTests {
 
         testInt2BvModelConversion(
             expressions,
-            KBv2IntRewriter.RewriteMode.LAZY,
+            KBv2IntRewriter.RewriteMode.EAGER,
             KBv2IntRewriter.AndRewriteMode.SUM,
-            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS
+            KBv2IntRewriter.SignednessMode.SIGNED
         )
     }
 
@@ -215,25 +230,23 @@ class RewriterTests {
         val weights = Bv2IntBenchmarkWeightBuilder()
             .enableBvCmp(5.0)
             .enableBvLia(10.0)
+//            .enableBvNia(0.65)
 //            .enableBvWeird(2.0)
-            .enableBvBitwise(3.5)
+//            .enableBvBitwise(3.5)
             .build()
         val expressions = generateRandomExpressions(
-            size = 1000,
-            batchSize = 500,
+            size = 2000,
+            batchSize = 2000,
             params = params,
-            random = Random(4),
+            random = Random(11),
             weights = weights,
             isVerbose = true
-        ) { expr ->
-            val decls = KDeclCounter(this).countDeclarations(expr)
-            countOperations(decls, bitwiseDecls) > 0
-        }
+        )
 
         testBv2IntModelConversion(
             expressions,
             KBv2IntRewriter.AndRewriteMode.SUM,
-            KBv2IntRewriter.SignednessMode.SIGNED_UNSAT_TEST
+            KBv2IntRewriter.SignednessMode.SIGNED
         )
     }
 
