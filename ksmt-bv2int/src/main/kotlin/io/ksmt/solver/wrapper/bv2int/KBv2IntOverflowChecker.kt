@@ -117,7 +117,7 @@ class KBv2IntOverflowChecker constructor(
     }
 
     private fun transformIfOverflow(expr: KExpr<KIntSort>, sizeBits: UInt): KExpr<KIntSort> = with(ctx) {
-        val value = model.eval(expr, false)
+        val value = model.eval(expr, true)
         val pow = BigInteger.TWO.pow(sizeBits.toInt() - 1)
         val lowerBound = -pow
         val upperBound = pow - BigInteger.ONE

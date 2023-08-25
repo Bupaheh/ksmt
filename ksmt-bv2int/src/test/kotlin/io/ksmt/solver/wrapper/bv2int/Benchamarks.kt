@@ -3,8 +3,6 @@ package io.ksmt.solver.wrapper.bv2int
 import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
-import com.sri.yices.Terms
-import com.sri.yices.Types
 import io.ksmt.KContext
 import io.ksmt.expr.KExpr
 import io.ksmt.runner.serializer.AstSerializationCtx
@@ -43,7 +41,7 @@ fun KContext.readFormulas(file: File): List<KExpr<KBoolSort>> {
 }
 
 private data class MeasureAssertTimeResult(val nanoTime: Long, val status: KSolverStatus, val roundCnt: Int) {
-    override fun toString(): String = "$status ${nanoTime / 1e6} $roundCnt"
+    override fun toString(): String = "$status ${nanoTime / 1e3} $roundCnt"
 }
 
 enum class TimerMode {
@@ -68,7 +66,7 @@ private fun KContext.measureAssertTime(
     solver.resetCheckTime()
     val assertTime = measureNanoTime {
         solver.assert(expr)
-        status = solver.check(2.seconds)
+        status = solver.check(1.seconds)
     }
 
     val resTime = when (timerMode) {
@@ -163,9 +161,9 @@ class Solver(
 
         suffix += when (signednessMode) {
             SignednessMode.UNSIGNED -> ""
-            SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedGuardsCmp2"
-            SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedNoBoundsOneRoundGuardsCmp2"
-            SignednessMode.SIGNED_UNSAT_TEST -> "-SignedUnsatTestingGuardsCmp2"
+            SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflowMulC2"
+            SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
+            SignednessMode.SIGNED -> "-Signed"
         }
 
         return prefix + innerSolver + suffix
@@ -203,7 +201,7 @@ fun runDirBenchmark(paths: List<String>, solvers: List<Solver>, resPath: String,
 
 fun main() {
     val timerMode = TimerMode.CHECK_TIME
-    val expressionsFileName = "1Snia"
+    val expressionsFileName = "QF_BV_wliac"
     val solvers = listOf(
 //        Solver(Solver.InnerSolver.Bitwuzla),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED),
@@ -211,9 +209,9 @@ fun main() {
 //        Solver(Solver.InnerSolver.CVC5),
 //        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_NO_OVERFLOW),
 //        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS),
-        Solver(Solver.InnerSolver.CVC5),
+//        Solver(Solver.InnerSolver.CVC5),
 //        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED),
-        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+        Solver(Solver.InnerSolver.Yices, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_UNSAT_TEST),
 //        Solver(Solver.InnerSolver.Yices),
@@ -229,23 +227,22 @@ fun main() {
     val ctx = KContext()
     val expressions = ctx.readFormulas(File("generatedExpressions/$expressionsFileName"))
         .mapIndexed { id, expr -> id to expr }
-        .filter { (id, _) -> id in 0..200 }
+        .filter { (id, _) -> id in 8440..15000 }
 //        .filter { (id, _) -> id !in listOf(319) }
 
 //    ctx.runBenchmark(
 //        outputFile = File("benchmarkResults/trash.csv"),
-//        solver = Solver(Solver.InnerSolver.Z3),
-//        expressions = expressions.take(100),
+//        solver = Solver(Solver.InnerSolver.Yices, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+//        expressions = expressions.take(1000),
 //        repeatNum = 3,
 //        timerMode = timerMode
 //    )
-//
 //    return
 
 
     for (solver in solvers) {
         ctx.runBenchmark(
-            outputFile = File("benchmarkResults/$expressionsFileName${timerMode}Pres.csv"),
+            outputFile = File("benchmarkResults/$expressionsFileName${timerMode}.csv"),
             solver = solver,
             expressions = expressions,
             repeatNum = 3,
