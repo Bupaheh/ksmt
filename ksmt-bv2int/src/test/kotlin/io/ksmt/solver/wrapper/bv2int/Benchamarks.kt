@@ -19,6 +19,7 @@ import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.AndRewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode
 import io.ksmt.utils.mkConst
 import java.io.File
+import kotlin.math.max
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration.Companion.seconds
 
@@ -151,7 +152,7 @@ class Solver(
 
         val prefix = when (rewriteMode) {
             RewriteMode.EAGER -> "Eager-"
-            RewriteMode.LAZY -> "LazyImportantApps-"
+            RewriteMode.LAZY -> "NewLazyImportantApps-"
         }
 
         var suffix =  when (andRewriteMode) {
@@ -161,8 +162,8 @@ class Solver(
 
         suffix += when (signednessMode) {
             SignednessMode.UNSIGNED -> ""
-            SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflowMulC2"
-            SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
+            SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflowOriginalUnsat"
+            SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBoundsOriginalUnsat"
             SignednessMode.SIGNED -> "-Signed"
         }
 
@@ -170,48 +171,22 @@ class Solver(
     }
 }
 
-val exprsToCheck = mutableListOf(0, 27, 31, 50, 59, 76, 88, 89, 117, 127, 132, 134, 138, 147, 153, 166)
-// lia
-
-fun runDirBenchmark(paths: List<String>, solvers: List<Solver>, resPath: String, timerMode: TimerMode) {
-    for (solver in solvers) {
-        var cnt = 121
-
-        paths.forEach { path ->
-            val ctx = KContext()
-            val expressions = ctx.readFormulas(File(path))
-                .mapIndexed { id, expr -> id + cnt to expr }
-                .filter { (id, _) -> id < 10000 && id !in listOf(94) }
-            cnt += expressions.size
-
-            ctx.runBenchmark(
-                outputFile = File("benchmarkResults/$resPath.csv"),
-                solver = solver,
-                expressions = expressions,
-                repeatNum = 1,
-                timerMode = timerMode
-            )
-
-            println(exprsToCheck)
-            println(path)
-        }
-    }
-}
-
-
 fun main() {
     val timerMode = TimerMode.CHECK_TIME
-    val expressionsFileName = "QF_BV_wliac"
+    val expressionsFileName = "QF_BV_wliaB"
     val solvers = listOf(
 //        Solver(Solver.InnerSolver.Bitwuzla),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+//        Solver(Solver.InnerSolver.Yices),
 //        Solver(Solver.InnerSolver.CVC5),
-//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_NO_OVERFLOW),
-//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS),
-//        Solver(Solver.InnerSolver.CVC5),
+        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+//        Solver(Solver.InnerSolver.Yices),
+//        Solver(Solver.InnerSolver.Z3, RewriteMode.LAZY, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+//        Solver(Solver.InnerSolver.Z3),
+//        Solver(Solver.InnerSolver.Yices),
 //        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED),
-        Solver(Solver.InnerSolver.Yices, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+//        Solver(Solver.InnerSolver.Yices, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS),
 //        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_UNSAT_TEST),
 //        Solver(Solver.InnerSolver.Yices),
@@ -224,28 +199,49 @@ fun main() {
 //    runDirBenchmark(paths, solvers, prefix)
 //    return
 
+
+    val stepIdx = 0
+    val step = 20000
     val ctx = KContext()
+    // wliaB
+//    val skipExprs = listOf(
+//        211, 403, 528, 798, 1946, 2342, 2347, 2357, 2362, 2640, 2717, 2886, 2948,
+//        3393, 3676, 3794, 4212, 4588, 4654, 4960, 4994, 5156, 5168, 5715, 5890, 5892,
+//        6340, 6693, 6725, 6886, 7095, 7705, 7835, 8154, 8429, 8453, 8470, 8664,
+//        9088, 9118, 9392, 9595, 9645, 9715, 10033, 10067, 10136, 10142, 10226
+//    )
+    // wliaB cvc
+    val skipExprs = listOf(
+        85, 95, 211, 403, 528, 798, 1946, 2342, 2347, 2357, 2362, 2640, 2717, 2886, 2948,
+        3393, 3676, 3794, 4212, 4588, 4654, 4960, 4994, 5156, 5168, 5715, 5890, 5892,
+        6340, 6693, 6725, 6886, 7095, 7705, 7835, 8154, 8429, 8453, 8470, 8664,
+        9088, 9118, 9392, 9595, 9645, 9715, 10033, 10067, 10136, 10142, 10226
+    )
+//    val skipExprs = listOf<Int>(124, 1141, 1822, 2001)
     val expressions = ctx.readFormulas(File("generatedExpressions/$expressionsFileName"))
         .mapIndexed { id, expr -> id to expr }
-        .filter { (id, _) -> id in 8440..15000 }
+        .filter { (id, _) -> id in 1704..5093 }
+        .filter { (id, ) -> id !in skipExprs }
+
 //        .filter { (id, _) -> id !in listOf(319) }
 
 //    ctx.runBenchmark(
 //        outputFile = File("benchmarkResults/trash.csv"),
-//        solver = Solver(Solver.InnerSolver.Yices, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
+//        solver = Solver(Solver.InnerSolver.Z3, RewriteMode.LAZY, signednessMode = SignednessMode.UNSIGNED),
+////        solver = Solver(Solver.InnerSolver.Yices),
 //        expressions = expressions.take(1000),
 //        repeatNum = 3,
 //        timerMode = timerMode
 //    )
 //    return
 
-
     for (solver in solvers) {
         ctx.runBenchmark(
             outputFile = File("benchmarkResults/$expressionsFileName${timerMode}.csv"),
+//            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
             solver = solver,
             expressions = expressions,
-            repeatNum = 3,
+            repeatNum = 1,
             timerMode = timerMode
         )
     }

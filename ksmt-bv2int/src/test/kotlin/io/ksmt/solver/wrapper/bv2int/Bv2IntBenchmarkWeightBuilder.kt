@@ -115,8 +115,8 @@ class Bv2IntBenchmarkWeightBuilder(private val defaultWeight: Double = 1.0) {
         private val bvWeirdGenerators = listOf(
             "mkBvZeroExtensionExpr",
             "mkBvSignExtensionExpr",
-            "mkBvConcatExpr",
-            "mkBvExtractExpr",
+//            "mkBvConcatExpr",
+//            "mkBvExtractExpr",
         )
 
 //        private val bvRotateGenerators = listOf(

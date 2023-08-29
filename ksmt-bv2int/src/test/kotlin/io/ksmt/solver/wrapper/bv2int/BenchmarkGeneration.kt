@@ -36,16 +36,15 @@ val generalDecls = setOf(
 )
 
 val liaDecls = setOf(
-    "bvneg", "bvadd", "bvsub", "bvmulC", "bvudivC", "bvsdivC", "bvuremC", "bvsremC", "bvsmodC"
-)
-
-val newLia = setOf(
-    "bvmulC", "bvudivC", "bvsdivC", "bvuremC", "bvsremC", "bvsmodC"
+    "bvneg", "bvadd", "bvsub",
+    "zero_extend", "sign_extend",
+    "bvmulC"
+//    "bvmul", "bvudiv", "bvsdiv", "bvurem", "bvsrem", "bvsmod",
 )
 
 val weirdDecls = setOf(
-    "zero_extend", "sign_extend",
-//    "concat", "extract"
+//    "zero_extend", "sign_extend",
+    "concat", "extract"
 )
 
 val niaDecls = setOf(
@@ -53,7 +52,7 @@ val niaDecls = setOf(
 )
 
 val bitwiseDecls = setOf(
-//    "bvnot",
+    "bvnot",
     "bvand", "bvor", "bvxor", "bvnor", "bvnand", "bvxnor"
 )
 
@@ -61,7 +60,7 @@ val shiftDecls = setOf(
     "bvshl", "bvlshr", "bvashr"
 )
 
-val allDecls = generalDecls + liaDecls + weirdDecls
+val allDecls = generalDecls + liaDecls + weirdDecls + shiftDecls + bitwiseDecls
 
 fun countOperations(decls: HashMap<String, Int>, operations: Set<String>): Int {
     return operations.fold(0) { acc, el -> acc + decls.getOrDefault(el, 0) }
@@ -95,14 +94,11 @@ fun readSmtBenchmarkData(
         val shiftCnt = countOperations(decls, shiftDecls)
 
         val flag = decls.keys.all { it in allDecls }
-                && (weirdCnt > 0 && liaCnt * 0.5 > weirdCnt || liaCnt < 1000)
+                && liaCnt > 5
+                && weirdCnt > 0
 
         if (flag) {
             expressions.add(expr)
-        }
-
-        if (flag && countOperations(decls, newLia) > 0) {
-            println("NEW")
         }
     }
 
@@ -132,26 +128,40 @@ fun testYices() = with(KContext()) {
 
 fun main() = with(KContext()) {
 //    val ctx = KContext()
-//    val expressions = ctx.readFormulas(File("generatedExpressions/QF_BV_05wlia"))
+//    val expressions = ctx.readFormulas(File("generatedExpressions/QF_BV_wliac"))
 //    val rewriter = KUnsignedToSignedBvRewriter(ctx)
 //
-//    val signedExpressions = expressions.map { rewriter.apply(it) }
+//    val signedExpressions = expressions.filter {
+//        val decls = KDeclCounter(ctx).countDeclarations(it)
+//        countOperations(decls, liaDecls) > 5
+//    }
 //
-//    writeExpressions(ctx, signedExpressions, "generatedExpressions/QF_BV_swlia")
+//    writeExpressions(ctx, signedExpressions, "generatedExpressions/QF_BV_wliac")
 
     val ids = 0..92
     val exprs = mutableListOf<KExpr<KBoolSort>>()
     val ctx = KContext()
+    val rewriter = KUnsignedToSignedBvRewriter(ctx)
     for (i in ids) {
         println(i)
-        val ex = ctx.readFormulas(File("generatedExpressions/wliac/QF_BV_wliac$i"))
+        val ex = ctx.readFormulas(File("generatedExpressions/wliaB/QF_BV_wliaB$i"))
         exprs.addAll(ex)
     }
-    println(exprs.size)
-    writeExpressions(ctx, exprs, "generatedExpressions/QF_BV_wliac")
 
-//
-//    for (i in 2..92) {
+    val expressions = exprs.filter {
+        val decls = KDeclCounter(ctx).countDeclarations(it)
+        val liaCnt = countOperations(decls, liaDecls)
+        val bitCnt = countOperations(decls, bitwiseDecls)
+        val flag = decls.keys.all { it in allDecls } && bitCnt > 0 && liaCnt * 0.15 > bitCnt
+        flag
+    }.map { rewriter.apply(it) }
+
+    println(expressions.size)
+
+    writeExpressions(ctx, expressions, "generatedExpressions/QF_BV_blia")
+
+
+//    for (i in 9..92) {
 //        val ctx = KContext()
 //        val step = 500
 //        val exprs = readSmtBenchmarkData(
@@ -162,10 +172,8 @@ fun main() = with(KContext()) {
 //            limit = 10000
 //        )
 //
-//        writeExpressions(ctx, exprs, "generatedExpressions/wliac/QF_BV_wliac$i")
+//        writeExpressions(ctx, exprs, "generatedExpressions/wliaB/QF_BV_wliaB$i")
 //    }
-//
-//    return
 
 //    val params = GenerationParameters(
 //        seedExpressionsPerSort = 20,

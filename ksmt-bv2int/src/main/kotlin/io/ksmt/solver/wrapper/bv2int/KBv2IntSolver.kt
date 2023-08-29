@@ -67,7 +67,6 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
 
         currentAssertedExprs.add(rewritten)
 
-
         if (signednessMode != SignednessMode.UNSIGNED && signednessMode != SignednessMode.SIGNED) {
             originalExpressions.add(expr)
         }
@@ -128,12 +127,12 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
             }
 
             if (status == KSolverStatus.UNSAT) {
-                roundCount += 100
                 lastUnsatScope = currentScope
                 currentAssertedExprs = originalExpressions.map { expr ->
-                    unsatRewriter.rewriteBv2Int(expr).also { rewritten ->
-                        currentBvAndLemmas = unsatRewriter.bvAndLemmas(rewritten).toMutableList()
-                    }
+                    ctx.mkAndNoSimplify(ctx.trueExpr, expr).also { currentBvAndLemmas.clear() }
+//                    unsatRewriter.rewriteBv2Int(expr).also { rewritten ->
+//                        currentBvAndLemmas = unsatRewriter.bvAndLemmas(rewritten).toMutableList()
+//                    }
                 }.toMutableList()
                 currentAssumptions = originalAssumptions.map { unsatRewriter.rewriteBv2Int(it) }.toMutableList()
 
@@ -197,7 +196,7 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
 
             if (unsatisfied.isEmpty()) return KSolverStatus.SAT
 
-            currentAssertedExprs.addAll(unsatisfied)
+            currentAssertedExprs.addAll(unsatisfied.map { ctx.mkAndNoSimplify(ctx.trueExpr, it) })
             unsatisfied.forEach { solver.assert(it) }
 
             left = timeLeft(start, timeout)

@@ -12,8 +12,6 @@ import io.ksmt.sort.KSort
 class KDeclCounter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
     private val declCount: HashMap<String, Int> = hashMapOf()
     private val visited = hashSetOf<KExpr<*>>()
-    private val niaDecls = setOf("bvmul", "bvudiv", "bvsdiv", "bvurem", "bvsrem", "bvsmod")
-
 
     override fun <T : KSort, A : KSort> transformApp(expr: KApp<T, A>): KExpr<T> {
         if (expr is KConst<*>) return expr
@@ -22,7 +20,7 @@ class KDeclCounter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
 
         var name = expr.decl.name
 
-        if (name in niaDecls && expr.args.take(2).any { it is KInterpretedValue<*> }) {
+        if (name == "bvmul" && expr.args.take(2).any { it is KInterpretedValue<*> }) {
             name += "C"
         }
 

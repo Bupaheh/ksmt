@@ -216,7 +216,7 @@ class KBv2IntRewriter(
 
         val lemma = mkAnd(LemmaFlatter.flatLemma(transformedExpr.getLemma()))
 
-        mkAnd(transformedExpr, lemma, flat = false).addBvAndLemma(transformedExpr.getBvAndLemma())
+        mkAndNoSimplify(transformedExpr, lemma).addBvAndLemma(transformedExpr.getBvAndLemma())
     }
 
     fun bvAndLemmas(expr: KExpr<KBoolSort>): List<KExpr<KBoolSort>> {
@@ -959,22 +959,19 @@ class KBv2IntRewriter(
         this@KBv2IntRewriter.transformExprAfterTransformedBv2Int(
             expr,
             expr.value,
-            WrapMode.NONE,
-            WrapMode.NONE
-        ) { value: KBv2IntAuxExpr ->
+            WrapMode.NORMALIZED,
+            WrapMode.NORMALIZED
+        ) { value: KExpr<KIntSort> ->
             when (signedness) {
                 Signedness.SIGNED -> value
                 Signedness.UNSIGNED -> {
-                    val normalizedValue = value.normalized
+                    val normalizedValue = value
                     val valueSizeBits = expr.value.sort.sizeBits
                     val signCondition = normalizedValue / mkPowerOfTwoExpr(valueSizeBits - 1u) eq 0.expr
                     val extensionBits = (mkPowerOfTwoExpr(expr.extensionSize.toUInt()) - 1.expr) *
                             mkPowerOfTwoExpr(valueSizeBits)
 
-                    KBv2IntAuxExprNormalized(
-                        mkIte(signCondition, normalizedValue, normalizedValue + extensionBits),
-                        valueSizeBits
-                    )
+                    mkIte(signCondition, normalizedValue, normalizedValue + extensionBits)
                 }
             }
         }
@@ -984,15 +981,15 @@ class KBv2IntRewriter(
         transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency = expr.value,
-            preprocessMode = WrapMode.NONE,
-            postRewriteMode = WrapMode.NONE
-        ) { value: KBv2IntAuxExpr ->
+            preprocessMode = WrapMode.NORMALIZED,
+            postRewriteMode = WrapMode.NORMALIZED
+        ) { value: KExpr<KIntSort> ->
             if (expr.extensionSize == 0) return@transformExprAfterTransformedBv2Int value
 
             when (signedness) {
                 Signedness.UNSIGNED -> value
                 Signedness.SIGNED ->
-                    KBv2IntAuxExprNormalized(toUnsigned(value.normalized, expr.value.sort.sizeBits), expr.sort.sizeBits)
+                    toUnsigned(value, expr.value.sort.sizeBits)
             }
         }
     }

@@ -2,6 +2,7 @@ package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.KContext
 import io.ksmt.expr.KAddArithExpr
+import io.ksmt.expr.KAndBinaryExpr
 import io.ksmt.expr.KArray2Select
 import io.ksmt.expr.KArray3Select
 import io.ksmt.expr.KArrayNSelect
@@ -114,6 +115,10 @@ class KBv2IntOverflowChecker constructor(
 
             mkArrayNSelect(array, indices).uncheckedCast()
         }
+    }
+
+    override fun transform(expr: KAndBinaryExpr): KExpr<KBoolSort> = with(ctx) {
+        transformExprAfterTransformed(expr, expr.lhs, expr.rhs, ::mkAndNoSimplify)
     }
 
     private fun transformIfOverflow(expr: KExpr<KIntSort>, sizeBits: UInt): KExpr<KIntSort> = with(ctx) {
