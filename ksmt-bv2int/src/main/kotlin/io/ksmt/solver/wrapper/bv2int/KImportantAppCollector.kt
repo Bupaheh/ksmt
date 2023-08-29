@@ -164,7 +164,10 @@ class KImportantAppCollector private constructor(
 
             val collector = KImportantAppCollector(exprs.first().ctx, model, bv2intContext)
 
-            exprs.forEach { expr ->
+            exprs.map { expr ->
+                require(expr is KAndBinaryExpr)
+                expr.lhs
+            }.forEach { expr ->
                 collector.importantExprs.add(expr)
                 collector.apply(expr)
             }
