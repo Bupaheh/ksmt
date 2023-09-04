@@ -25,6 +25,7 @@ import io.ksmt.expr.KBitVec32Value
 import io.ksmt.expr.KBitVec64Value
 import io.ksmt.expr.KBitVec8Value
 import io.ksmt.expr.KBitVecCustomValue
+import io.ksmt.expr.KBitVecNumberValue
 import io.ksmt.expr.KBv2IntExpr
 import io.ksmt.expr.KBvAddExpr
 import io.ksmt.expr.KBvAddNoOverflowExpr
@@ -114,7 +115,6 @@ import io.ksmt.expr.KGeArithExpr
 import io.ksmt.expr.KGtArithExpr
 import io.ksmt.expr.KImpliesExpr
 import io.ksmt.expr.KIntNumExpr
-import io.ksmt.expr.KInterpretedValue
 import io.ksmt.expr.KIsIntRealExpr
 import io.ksmt.expr.KIteExpr
 import io.ksmt.expr.KLeArithExpr
@@ -436,6 +436,27 @@ class KBv2IntRewriter(
         )
     }
 
+    private fun rewriteBvAndSumConst(const: KBitVecNumberValue<*, *>, arg: KExpr<KIntSort>): KExpr<KIntSort> = with(ctx) {
+        val stringValue = const.stringValue.reversed()
+        var result: KExpr<KIntSort> = 0.expr
+
+        var l = 0
+        while (l < stringValue.length) {
+            if (stringValue[l] == '0') {
+                l++
+                continue
+            }
+
+            var r = l + 1
+            while (r < stringValue.length && stringValue[r] == '1') r++
+
+            result += (arg mod mkPowerOfTwoExpr(r.toUInt())) / mkPowerOfTwoExpr(l.toUInt()) * mkPowerOfTwoExpr(l.toUInt())
+            l = r
+        }
+
+        return result
+    }
+
     private fun <T : KBvSort> transformBvAndSum(expr: KBvAndExpr<T>): KExpr<T> = with(ctx) {
         transformExprAfterTransformedBv2Int(
             expr = expr,
@@ -443,13 +464,25 @@ class KBv2IntRewriter(
             dependency1 = expr.arg1,
             preprocessMode = WrapMode.NONE
         ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
+            when {
+                expr.arg0 is KBitVecNumberValue<*, *> ->
+                    return@transformExprAfterTransformedBv2Int rewriteBvAndSumConst(
+                        expr.arg0.uncheckedCast(),
+                        arg1.denormalized
+                    )
+                expr.arg1 is KBitVecNumberValue<*, *> ->
+                    return@transformExprAfterTransformedBv2Int rewriteBvAndSumConst(
+                        expr.arg1.uncheckedCast(),
+                        arg0.denormalized
+                    )
+            }
             val sizeBits = expr.sort.sizeBits
             var result: KExpr<KIntSort> = 0.expr
 
             for (i in 0u until expr.sort.sizeBits) {
                 result += mkIntBvAnd(
-                    arg0 = arg0.denormalized,
-                    arg1 = arg1.denormalized,
+                    arg0 = toUnsigned(arg0.denormalized, sizeBits),
+                    arg1 = toUnsigned(arg1.denormalized, sizeBits),
                     bit = i
                 ) * mkPowerOfTwoExpr(i)
             }
@@ -1014,15 +1047,11 @@ class KBv2IntRewriter(
             expr.arg,
             expr.shift,
             WrapMode.NONE,
-            WrapMode.DENORMALIZED
+            WrapMode.DENORMALIZED,
+            checkOverflow = true
         ) { arg: KBv2IntAuxExpr, shift: KBv2IntAuxExpr ->
             val sizeBits = expr.sort.sizeBits
-            val unsignedRes = arg.denormalized * bv2IntContext.mkPowerOfTwoApp(shift.normalized)
-
-            val result = when (signedness) {
-                Signedness.UNSIGNED -> unsignedRes
-                Signedness.SIGNED -> unsignedToSigned(unsignedRes mod mkPowerOfTwoExpr(sizeBits), sizeBits)
-            }
+            val result = arg.denormalized * bv2IntContext.mkPowerOfTwoApp(shift.normalized)
 
             mkIte(
                 condition = toUnsigned(shift.normalized, expr.shift.sort.sizeBits) ge sizeBits.toLong().expr,

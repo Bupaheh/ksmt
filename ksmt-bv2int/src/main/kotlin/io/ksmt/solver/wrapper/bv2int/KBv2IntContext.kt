@@ -26,7 +26,6 @@ class KBv2IntContext(ctx: KContext) {
     fun isAuxDecl(decl: KDecl<*>): Boolean = decl in auxDecls
 
     fun saveAuxDecl(decl: KDecl<*>): Boolean = auxDecls.add(decl)
-
     fun mkPowerOfTwoApp(power: KExpr<KIntSort>): KExpr<KIntSort> = powerOfTwoFunc.apply(listOf(power))
     fun mkBvAndApp(arg0: KExpr<KIntSort>, arg1: KExpr<KIntSort>) = bvAndFunc.apply(listOf(arg0, arg1))
     fun extractBvAndApplication(expr: KExpr<KBoolSort>) = bvAndLemmaApplication[expr]
