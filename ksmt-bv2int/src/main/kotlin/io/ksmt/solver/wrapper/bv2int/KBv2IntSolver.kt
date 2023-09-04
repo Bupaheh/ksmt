@@ -129,10 +129,10 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
             if (status == KSolverStatus.UNSAT) {
                 lastUnsatScope = currentScope
                 currentAssertedExprs = originalExpressions.map { expr ->
-                    ctx.mkAndNoSimplify(ctx.trueExpr, expr).also { currentBvAndLemmas.clear() }
-//                    unsatRewriter.rewriteBv2Int(expr).also { rewritten ->
-//                        currentBvAndLemmas = unsatRewriter.bvAndLemmas(rewritten).toMutableList()
-//                    }
+//                    ctx.mkAndNoSimplify(ctx.trueExpr, expr).also { currentBvAndLemmas.clear() }
+                    unsatRewriter.rewriteBv2Int(expr).also { rewritten ->
+                        currentBvAndLemmas = unsatRewriter.bvAndLemmas(rewritten).toMutableList()
+                    }
                 }.toMutableList()
                 currentAssumptions = originalAssumptions.map { unsatRewriter.rewriteBv2Int(it) }.toMutableList()
 
