@@ -7,6 +7,11 @@ import io.ksmt.utils.powerOfTwo
 
 fun KContext.mkPowerOfTwoExpr(power: UInt): KExpr<KIntSort> = powerOfTwo(power).expr
 
+fun KContext.mkIntExtractBit(arg: KExpr<KIntSort>, bit: UInt) = arg / mkPowerOfTwoExpr(bit) mod 2.expr
+
+fun KContext.mkIntExtractBits(arg: KExpr<KIntSort>, high: UInt, low: UInt) =
+    (arg mod mkPowerOfTwoExpr(high + 1u)) / mkPowerOfTwoExpr(low)
+
 fun KContext.unsignedToSigned(value: KExpr<KIntSort>, sizeBits: UInt): KExpr<KIntSort> =
     mkIte(
         value lt mkPowerOfTwoExpr(sizeBits - 1u),
