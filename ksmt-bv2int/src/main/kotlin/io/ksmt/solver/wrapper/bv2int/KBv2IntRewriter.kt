@@ -1194,7 +1194,7 @@ class KBv2IntRewriter(
             when (signedness) {
                 Signedness.SIGNED -> mkIte(
                     shift ge sizeBits.toLong().expr or (shift lt 0.expr),
-                    mkIte(arg le 0.expr, 0.expr, (-1).expr),
+                    mkIte(arg ge 0.expr, 0.expr, (-1).expr),
                     arg / bv2IntContext.mkPowerOfTwoApp(shift)
                 )
                 Signedness.UNSIGNED -> {
