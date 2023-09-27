@@ -10,7 +10,11 @@ fun KContext.mkPowerOfTwoExpr(power: UInt): KExpr<KIntSort> = powerOfTwo(power).
 fun KContext.mkIntExtractBit(arg: KExpr<KIntSort>, bit: UInt) = arg / mkPowerOfTwoExpr(bit) mod 2.expr
 
 fun KContext.mkIntExtractBits(arg: KExpr<KIntSort>, high: UInt, low: UInt) =
-    (arg mod mkPowerOfTwoExpr(high + 1u)) / mkPowerOfTwoExpr(low)
+    if (low > high) {
+        0.expr
+    } else {
+        (arg mod mkPowerOfTwoExpr(high + 1u)) / mkPowerOfTwoExpr(low)
+    }
 
 fun KContext.unsignedToSigned(value: KExpr<KIntSort>, sizeBits: UInt): KExpr<KIntSort> =
     mkIte(
