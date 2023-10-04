@@ -21,7 +21,7 @@ class KBv2IntModel(
     override val declarations: Set<KDecl<*>> by lazy {
         model.declarations
             .filterNot { bv2IntContext.isAuxDecl(it) }
-            .map { bv2IntContext.cachedDecl(it) ?: error("Unexpected null declaration") }
+            .mapNotNull { bv2IntContext.cachedDecl(it) }
             .toSet()
     }
 
