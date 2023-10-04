@@ -1,6 +1,7 @@
 package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.KContext
+import io.ksmt.expr.KEqExpr
 import io.ksmt.expr.KExpr
 import io.ksmt.expr.KFunctionApp
 import io.ksmt.expr.KIntNumExpr
