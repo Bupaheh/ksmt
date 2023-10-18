@@ -4,7 +4,22 @@ import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
 import io.ksmt.KContext
+import io.ksmt.expr.KApp
+import io.ksmt.expr.KBvAndExpr
+import io.ksmt.expr.KBvArithShiftRightExpr
+import io.ksmt.expr.KBvExtractExpr
+import io.ksmt.expr.KBvLogicalShiftRightExpr
+import io.ksmt.expr.KBvNAndExpr
+import io.ksmt.expr.KBvNorExpr
+import io.ksmt.expr.KBvOrExpr
+import io.ksmt.expr.KBvShiftLeftExpr
+import io.ksmt.expr.KBvXNorExpr
+import io.ksmt.expr.KBvXorExpr
 import io.ksmt.expr.KExpr
+import io.ksmt.expr.KInterpretedValue
+import io.ksmt.expr.rewrite.KExprUninterpretedDeclCollector
+import io.ksmt.expr.rewrite.simplify.KExprSimplifier
+import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.runner.serializer.AstSerializationCtx
 import io.ksmt.solver.KSolver
 import io.ksmt.solver.KSolverStatus
@@ -17,9 +32,12 @@ import io.ksmt.utils.uncheckedCast
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.RewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.AndRewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode
+import io.ksmt.sort.KBvSort
+import io.ksmt.sort.KSort
+import io.ksmt.utils.getValue
 import io.ksmt.utils.mkConst
 import java.io.File
-import kotlin.math.max
+import kotlin.random.Random
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration.Companion.seconds
 
@@ -152,7 +170,7 @@ class Solver(
 
         val prefix = when (rewriteMode) {
             RewriteMode.EAGER -> "Eager-"
-            RewriteMode.LAZY -> "NewLazyImportantApps-"
+            RewriteMode.LAZY -> "Lazy-"
         }
 
         var suffix =  when (andRewriteMode) {
@@ -162,8 +180,8 @@ class Solver(
 
         suffix += when (signednessMode) {
             SignednessMode.UNSIGNED -> ""
-            SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflowOriginalUnsat"
-            SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBoundsOriginalUnsat"
+            SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflow"
+            SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
             SignednessMode.SIGNED -> "-Signed"
         }
 
@@ -171,38 +189,77 @@ class Solver(
     }
 }
 
+class TempVisitor(ctx: KContext) : KNonRecursiveTransformer(ctx) {
+    private var flag = false
+
+    override fun <T : KSort, A : KSort> transformApp(expr: KApp<T, A>): KExpr<T> {
+        return super.transformApp(expr)
+    }
+
+    fun <T : KSort> visit(expr: KExpr<T>): Boolean {
+        apply(expr)
+        return flag
+    }
+
+    private fun visitBitwiseOp(lhs: KExpr<*>, rhs: KExpr<*>) {
+        val f = if (lhs is KApp<*, *>) lhs.decl.name else null
+        val s = if (rhs is KApp<*, *>) rhs.decl.name else null
+
+        if (f == null || s == null) return
+
+        val l = listOf(lhs, rhs)
+
+        flag = true
+
+//        if (f == "bvshl" && s == "zero_extend") {
+//            flag = false
+//        }
+//
+//        if (flag) {
+//            println("$f $s")
+//        }
+    }
+
+    override fun <T : KBvSort> transform(expr: KBvAndExpr<T>): KExpr<T> {
+        visitBitwiseOp(expr.arg0, expr.arg1)
+        return super.transform(expr)
+    }
+
+    override fun <T : KBvSort> transform(expr: KBvOrExpr<T>): KExpr<T> {
+        visitBitwiseOp(expr.arg0, expr.arg1)
+        return super.transform(expr)
+    }
+
+    override fun <T : KBvSort> transform(expr: KBvXorExpr<T>): KExpr<T> {
+        visitBitwiseOp(expr.arg0, expr.arg1)
+        return super.transform(expr)
+    }
+
+    override fun <T : KBvSort> transform(expr: KBvNAndExpr<T>): KExpr<T> {
+        visitBitwiseOp(expr.arg0, expr.arg1)
+        return super.transform(expr)
+    }
+
+    override fun <T : KBvSort> transform(expr: KBvNorExpr<T>): KExpr<T> {
+        visitBitwiseOp(expr.arg0, expr.arg1)
+        return super.transform(expr)
+    }
+
+    override fun <T : KBvSort> transform(expr: KBvXNorExpr<T>): KExpr<T> {
+        visitBitwiseOp(expr.arg0, expr.arg1)
+        return super.transform(expr)
+    }
+}
+
 fun main() {
+    val ctx = KContext()
     val timerMode = TimerMode.CHECK_TIME
-    val expressionsFileName = "QF_BV_wliaB"
+    val expressionsFileName = "QF_BV_2000CT"
     val solvers = listOf(
-//        Solver(Solver.InnerSolver.Bitwuzla),
-//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED),
-//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
-//        Solver(Solver.InnerSolver.Yices),
-//        Solver(Solver.InnerSolver.CVC5),
-        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
-//        Solver(Solver.InnerSolver.Yices),
-//        Solver(Solver.InnerSolver.Z3, RewriteMode.LAZY, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
-//        Solver(Solver.InnerSolver.Z3),
-//        Solver(Solver.InnerSolver.Yices),
-//        Solver(Solver.InnerSolver.CVC5, RewriteMode.EAGER, signednessMode = SignednessMode.UNSIGNED),
-//        Solver(Solver.InnerSolver.Yices, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW),
-//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS),
-//        Solver(Solver.InnerSolver.Z3, RewriteMode.EAGER, signednessMode = SignednessMode.SIGNED_UNSAT_TEST),
-//        Solver(Solver.InnerSolver.Yices),
-//        Solver(Solver.InnerSolver.Yices)
+        Solver(Solver.InnerSolver.Z3, RewriteMode.LAZY, AndRewriteMode.SUM, SignednessMode.SIGNED),
+//        Solver(Solver.InnerSolver.Z3)
     )
 
-//    val prefix = "QF_BV_lia"
-//    val paths = (11..46).map { "generatedExpressions/lia/${prefix}$it" }
-//
-//    runDirBenchmark(paths, solvers, prefix)
-//    return
-
-
-    val stepIdx = 0
-    val step = 20000
-    val ctx = KContext()
     // wliaB
 //    val skipExprs = listOf(
 //        211, 403, 528, 798, 1946, 2342, 2347, 2357, 2362, 2640, 2717, 2886, 2948,
@@ -210,29 +267,38 @@ fun main() {
 //        6340, 6693, 6725, 6886, 7095, 7705, 7835, 8154, 8429, 8453, 8470, 8664,
 //        9088, 9118, 9392, 9595, 9645, 9715, 10033, 10067, 10136, 10142, 10226
 //    )
-    // wliaB cvc
-    val skipExprs = listOf(
-        85, 95, 211, 403, 528, 798, 1946, 2342, 2347, 2357, 2362, 2640, 2717, 2886, 2948,
-        3393, 3676, 3794, 4212, 4588, 4654, 4960, 4994, 5156, 5168, 5715, 5890, 5892,
-        6340, 6693, 6725, 6886, 7095, 7705, 7835, 8154, 8429, 8453, 8470, 8664,
-        9088, 9118, 9392, 9595, 9645, 9715, 10033, 10067, 10136, 10142, 10226
-    )
-//    val skipExprs = listOf<Int>(124, 1141, 1822, 2001)
+//    // wliaB cvc
+//    val skipExprs = listOf(
+//        85, 95, 211, 403, 528, 798, 1946, 2342, 2347, 2357, 2362, 2640, 2717, 2886, 2948,
+//        3393, 3676, 3794, 4212, 4588, 4654, 4960, 4994, 5156, 5168, 5715, 5890, 5892,
+//        6340, 6693, 6725, 6886, 7095, 7705, 7835, 8154, 8429, 8453, 8470, 8664,
+//        9088, 9118, 9392, 9595, 9645, 9715, 10033, 10067, 10136, 10142, 10226
+//    )
+    // cvc bslia
+//    val skipExprs = listOf<Int>(7, 73, 291, 416, 588, 634)
+    // cvc bwslia z3
+//    val skipExprs = listOf(258, 1108, 3493)
+    // cvc wbslia cvc
+//    val skipExprs = listOf(63, 69, 80, 113, 154)
+
+//    val skipExprs = listOf(553, 645)
+    val skipExprs = listOf(258)
     val expressions = ctx.readFormulas(File("generatedExpressions/$expressionsFileName"))
         .mapIndexed { id, expr -> id to expr }
-        .filter { (id, _) -> id in 1704..5093 }
+        .filter { (id, _) -> id in 387..1000 }
+//        .filter { TempVisitor(ctx).visit(it.second) }
         .filter { (id, ) -> id !in skipExprs }
 
-//        .filter { (id, _) -> id !in listOf(319) }
-
-//    ctx.runBenchmark(
-//        outputFile = File("benchmarkResults/trash.csv"),
-//        solver = Solver(Solver.InnerSolver.Z3, RewriteMode.LAZY, signednessMode = SignednessMode.UNSIGNED),
-////        solver = Solver(Solver.InnerSolver.Yices),
-//        expressions = expressions.take(1000),
-//        repeatNum = 3,
-//        timerMode = timerMode
-//    )
+//    for (solver in solvers) {
+//        ctx.runBenchmark(
+//            outputFile = File("benchmarkResults/trash.csv"),
+////            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
+//            solver = solver,
+//            expressions = expressions,
+//            repeatNum = 4,
+//            timerMode = timerMode
+//        )
+//    }
 //    return
 
     for (solver in solvers) {

@@ -50,6 +50,7 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
     }
 
     private var currentBvAndLemmas = mutableListOf<KExpr<KBoolSort>>()
+    private var currentOverflowLemmas = mutableListOf<KExpr<KBoolSort>>()
     private val originalExpressions = mutableListOf<KExpr<KBoolSort>>()
     private var currentAssertedExprs = mutableListOf<KExpr<KBoolSort>>()
     private var currentAssumptions = mutableListOf<KExpr<KBoolSort>>()
@@ -67,6 +68,7 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
         val rewritten = currentRewriter.rewriteBv2Int(expr)
 
         currentAssertedExprs.add(rewritten)
+        currentOverflowLemmas.add(currentRewriter.overflowLemmas(rewritten))
 
         if (signednessMode != SignednessMode.UNSIGNED && signednessMode != SignednessMode.SIGNED) {
             originalExpressions.add(expr)
@@ -115,64 +117,47 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
 
     private fun signedCheck(timeout: Duration): KSolverStatus {
         val start = Date()
-        var left = timeout
+        val status = innerCheck(timeout)
 
-        while (left.isPositive()) {
-            val status = innerCheck(left)
-            if (signednessMode == SignednessMode.UNSIGNED ||
-                signednessMode == SignednessMode.SIGNED ||
-                status == KSolverStatus.UNKNOWN ||
-                isUnsatRewriter
-            ) {
-                return status
-            }
-
-            if (status == KSolverStatus.UNSAT) {
-                lastUnsatScope = currentScope
-                currentAssertedExprs = originalExpressions.map { expr ->
-//                    ctx.mkAndNoSimplify(ctx.trueExpr, expr).also { currentBvAndLemmas.clear() }
-                    unsatRewriter.rewriteBv2Int(expr).also { rewritten ->
-                        currentBvAndLemmas = unsatRewriter.bvAndLemmas(rewritten).toMutableList()
-                    }
-                }.toMutableList()
-                currentAssumptions = originalAssumptions.map { unsatRewriter.rewriteBv2Int(it) }.toMutableList()
-
-                reassertExpressions()
-                return innerCheck(timeLeft(start, timeout))
-            }
-
-            val model = solver.model()
-            val overflowChecker = KBv2IntOverflowChecker(ctx, model, bv2IntContext)
-            var correctModel = true
-
-            currentAssertedExprs.replaceAll { expr ->
-                overflowChecker.overflowCheck(expr).also { transformed ->
-                    correctModel = correctModel && transformed == expr
-                }
-            }
-            currentAssumptions.replaceAll { expr ->
-                overflowChecker.overflowCheck(expr).also { transformed ->
-                    correctModel = correctModel && transformed == expr
-                }
-            }
-            currentBvAndLemmas.replaceAll { expr ->
-                overflowChecker.overflowCheck(expr).also { transformed ->
-                    val application = bv2IntContext.extractBvAndApplication(expr) ?: error("Unexpected")
-                    bv2IntContext.registerApplication(
-                        transformed,
-                        overflowChecker.overflowCheck(application)
-                    )
-                }
-            }
-
-            if (correctModel) return status
-
-            reassertExpressions()
-            left = timeLeft(start, timeout)
-            roundCount++
+        if (signednessMode == SignednessMode.UNSIGNED ||
+            signednessMode == SignednessMode.SIGNED ||
+            status == KSolverStatus.UNKNOWN ||
+            isUnsatRewriter
+        ) {
+            return status
         }
 
-        return KSolverStatus.UNKNOWN
+        var isCorrect = status == KSolverStatus.SAT
+
+        if (status == KSolverStatus.SAT) {
+            val model = solver.model()
+
+            currentOverflowLemmas.forEach { overflowLemma ->
+                isCorrect = isCorrect && (model.eval(overflowLemma, true) == ctx.trueExpr)
+            }
+        }
+
+        if (isCorrect) return status
+
+        roundCount++
+        lastUnsatScope = currentScope
+        currentOverflowLemmas.clear()
+        currentAssertedExprs = originalExpressions.map { expr ->
+//                ctx.mkAndNoSimplify(ctx.trueExpr, expr).also { currentBvAndLemmas.clear() }
+            unsatRewriter.rewriteBv2Int(expr).also { rewritten ->
+                currentBvAndLemmas = unsatRewriter.bvAndLemmas(rewritten).toMutableList()
+                currentOverflowLemmas.add(currentRewriter.overflowLemmas(rewritten))
+            }
+        }.toMutableList()
+        currentAssumptions = originalAssumptions.map { unsatRewriter.rewriteBv2Int(it) }.toMutableList()
+
+        reassertExpressions()
+        val timeLeft = timeLeft(start, timeout)
+        return if (timeLeft.isPositive()) {
+            innerCheck(timeLeft)
+        } else {
+            KSolverStatus.UNKNOWN
+        }
     }
 
     private fun lazyCheck(timeout: Duration): KSolverStatus {
