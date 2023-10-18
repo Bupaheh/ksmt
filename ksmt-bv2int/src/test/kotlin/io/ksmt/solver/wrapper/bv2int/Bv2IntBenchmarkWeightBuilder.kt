@@ -51,7 +51,7 @@ class Bv2IntBenchmarkWeightBuilder(private val defaultWeight: Double = 1.0) {
 //            "mkBv16Sort",
             "mkBv32Sort",
             "mkBv64Sort",
-            "mkBv100Sort"
+            "mkBv100Sort",
         )
 
         private val defaultGenerators = listOf(
@@ -97,13 +97,21 @@ class Bv2IntBenchmarkWeightBuilder(private val defaultWeight: Double = 1.0) {
         )
 
         private val bvBitwiseGenerators = listOf(
-//            "mkBvNotExpr",
+            "mkBvNotExpr",
             "mkBvAndExpr",
 //            "mkBvOrExpr",
 //            "mkBvXorExpr",
 //            "mkBvXNorExpr",
 //            "mkBvNAndExpr",
 //            "mkBvNorExpr",
+            "mkBvEqConstAndConstExpr",
+            "mkBvAndConst",
+            "mkBvAndConstShlExpr",
+            "mkBvAndConstAshrExpr",
+            "mkBvAndConstLshrExpr"
+//            "mkBvAndShlExpr",
+//            "mkBvAndAshrExpr",
+//            "mkBvAndLshrExpr"
         )
 
         private val bvShiftGenerators = listOf(
@@ -115,8 +123,8 @@ class Bv2IntBenchmarkWeightBuilder(private val defaultWeight: Double = 1.0) {
         private val bvWeirdGenerators = listOf(
             "mkBvZeroExtensionExpr",
             "mkBvSignExtensionExpr",
-//            "mkBvConcatExpr",
-//            "mkBvExtractExpr",
+            "mkBvConcatExpr",
+            "mkBvExtractExpr",
         )
 
 //        private val bvRotateGenerators = listOf(

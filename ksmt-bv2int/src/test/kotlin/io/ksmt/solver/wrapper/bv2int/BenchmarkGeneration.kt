@@ -6,6 +6,7 @@ import com.jetbrains.rd.framework.UnsafeBuffer
 import io.ksmt.KContext
 import io.ksmt.expr.KExpr
 import io.ksmt.runner.serializer.AstSerializationCtx
+import io.ksmt.solver.KSolverStatus
 import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3SMTLibParser
 import io.ksmt.sort.KBoolSort
@@ -15,6 +16,7 @@ import io.ksmt.utils.mkConst
 import io.ksmt.utils.uncheckedCast
 import java.io.File
 import kotlin.random.Random
+import kotlin.time.Duration.Companion.seconds
 
 private fun writeExpressions(ctx: KContext, expressions: List<KExpr<KBoolSort>>, path: String) {
     val serializationCtx = AstSerializationCtx().apply { initCtx(ctx) }
@@ -38,7 +40,8 @@ val generalDecls = setOf(
 val liaDecls = setOf(
     "bvneg", "bvadd", "bvsub",
     "zero_extend", "sign_extend",
-    "bvmulC"
+    "bvmulC",
+//    "bvshlC", "bvlshrC", "bvashrC"
 //    "bvmul", "bvudiv", "bvsdiv", "bvurem", "bvsrem", "bvsmod",
 )
 
@@ -57,7 +60,8 @@ val bitwiseDecls = setOf(
 )
 
 val shiftDecls = setOf(
-    "bvshl", "bvlshr", "bvashr"
+    "bvshlC", "bvlshrC", "bvashrC",
+//    "bvshl", "bvlshr", "bvashr"
 )
 
 val allDecls = generalDecls + liaDecls + weirdDecls + shiftDecls + bitwiseDecls
@@ -77,27 +81,31 @@ fun readSmtBenchmarkData(
     val expressions = mutableListOf<KExpr<KBoolSort>>()
     val paths = File(dirPath).walk()
         .filter { it.extension == "smt2" }
+        .toList()
         .shuffled(Random(1))
         .mapIndexed { index, path -> index to path }
-        .filter { (idx, _) -> idx in begin..end && idx != 44839 }
-        .toList()
+        .filter { (idx, _) -> idx in begin..end && idx != 44839 && idx != 1351 }
 
     paths.forEach { (idx, file) ->
         println("$idx\t${expressions.size}")
 
         val expr = ctx.mkAnd(parser.parse(file.toPath()))
 
-        val decls = KDeclCounter(ctx).countDeclarations(expr)
-        val liaCnt = countOperations(decls, liaDecls)
-        val niaCnt = countOperations(decls, niaDecls)
-        val weirdCnt = countOperations(decls, weirdDecls)
-        val shiftCnt = countOperations(decls, shiftDecls)
+//        val decls = KDeclCounter(ctx).countDeclarations(expr)
+//        val liaCnt = countOperations(decls, liaDecls)
+//        val niaCnt = countOperations(decls, niaDecls)
+//        val weirdCnt = countOperations(decls, weirdDecls)
+//        val shiftCnt = countOperations(decls, shiftDecls)
+//        val bitCnt = countOperations(decls, bitwiseDecls)
+//
+//        val flag = decls.keys.all { it in allDecls }
+//                && liaCnt > 7
+//                && bitCnt > 0
+//                && liaCnt * 0.5 > bitCnt
+//                && liaCnt * 0.5 > weirdCnt
+//                && liaCnt * 0.5 > shiftCnt
 
-        val flag = decls.keys.all { it in allDecls }
-                && liaCnt > 5
-                && weirdCnt > 0
-
-        if (flag) {
+        if (true) {
             expressions.add(expr)
         }
     }
@@ -138,42 +146,71 @@ fun main() = with(KContext()) {
 //
 //    writeExpressions(ctx, signedExpressions, "generatedExpressions/QF_BV_wliac")
 
-    val ids = 0..92
+    val ids = 0..3
     val exprs = mutableListOf<KExpr<KBoolSort>>()
     val ctx = KContext()
     val rewriter = KUnsignedToSignedBvRewriter(ctx)
     for (i in ids) {
         println(i)
-        val ex = ctx.readFormulas(File("generatedExpressions/wliaB/QF_BV_wliaB$i"))
+        val ex = ctx.readFormulas(File("generatedExpressions/bv/QF_BV$i"))
         exprs.addAll(ex)
     }
 
-    val expressions = exprs.filter {
-        val decls = KDeclCounter(ctx).countDeclarations(it)
-        val liaCnt = countOperations(decls, liaDecls)
-        val bitCnt = countOperations(decls, bitwiseDecls)
-        val flag = decls.keys.all { it in allDecls } && bitCnt > 0 && liaCnt * 0.15 > bitCnt
-        flag
-    }.map { rewriter.apply(it) }
-
-    println(expressions.size)
-
-    writeExpressions(ctx, expressions, "generatedExpressions/QF_BV_blia")
-
-
-//    for (i in 9..92) {
-//        val ctx = KContext()
-//        val step = 500
-//        val exprs = readSmtBenchmarkData(
-//            ctx,
-//            "/home/pvl/Heh/Projects/QF_BV",
-//            begin = step * i,
-//            end = step * (i + 1),
-//            limit = 10000
-//        )
+    writeExpressions(ctx, exprs, "generatedExpressions/QF_BV_2000")
+    return
+//    val ctx = KContext()
+//    val exprs = ctx.readFormulas(File("generatedExpressions/wbslia/QF_BV_wbslia"))
 //
-//        writeExpressions(ctx, exprs, "generatedExpressions/wliaB/QF_BV_wliaB$i")
+//    val expressions = exprs.filter {
+//        val decls = KDeclCounter(ctx).countDeclarations(it)
+//        val liaCnt = countOperations(decls, liaDecls)
+//        val bitCnt = countOperations(decls, bitwiseDecls)
+//        val shiftCnt = countOperations(decls, shiftDecls)
+//        val weirdCnt = countOperations(decls, weirdDecls)
+//        val threshold = 0.2
+//        val flag = decls.keys.all { it in allDecls } && bitCnt > 0 &&
+//                liaCnt * threshold > bitCnt
+////                && weirdCnt < 5
+////                && liaCnt * threshold > weirdCnt
+////                liaCnt * threshold > shiftCnt
+//        flag
 //    }
+//
+//    println(expressions.size)
+//    writeExpressions(ctx, expressions, "generatedExpressions/QF_BV_wbslia")
+
+//    var satCnt = 0
+//
+//    KYicesSolver(ctx).use { solver ->
+//        expressions.forEachIndexed { idx, expr ->
+//            println("$idx/${expressions.size - 1}")
+//            solver.push()
+//            solver.assert(expr)
+//            if (solver.check(2.seconds) == KSolverStatus.SAT) satCnt++
+//
+//            solver.pop()
+//        }
+//    }
+//
+//    println(satCnt)
+//    println(expressions.size)
+
+//    writeExpressions(ctx, expressions, "generatedExpressions/QF_BV_bslia2")
+
+
+    for (i in 2..92) {
+        val ctx = KContext()
+        val step = 500
+        val exprs = readSmtBenchmarkData(
+            ctx,
+            "/home/pvl/Heh/Projects/QF_BV",
+            begin = step * i,
+            end = step * (i + 1),
+            limit = 10000
+        )
+
+        writeExpressions(ctx, exprs, "generatedExpressions/bv/QF_BV$i")
+    }
 
 //    val params = GenerationParameters(
 //        seedExpressionsPerSort = 20,

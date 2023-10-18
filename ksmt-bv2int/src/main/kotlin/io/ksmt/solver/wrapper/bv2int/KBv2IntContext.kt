@@ -16,7 +16,6 @@ class KBv2IntContext(val ctx: KContext) {
 
     private val declarations = hashMapOf<KDecl<*>, KDecl<*>>()
     private val auxDecls = hashSetOf<KDecl<*>>(bvAndFunc, powerOfTwoFunc)
-    private val overflowSizeBits = hashMapOf<KExpr<KIntSort>, UInt>()
     private val bvAndLemmaApplication = hashMapOf<KExpr<KBoolSort>, KExpr<KIntSort>>()
 
     fun saveDecl(originalDecl: KDecl<*>, rewrittenDecl: KDecl<*>) {
@@ -46,11 +45,4 @@ class KBv2IntContext(val ctx: KContext) {
             registerApplication(lemma.rhs, application)
         }
     }
-
-    fun getOverflowSizeBits(expr: KExpr<KIntSort>) = overflowSizeBits[expr]
-
-    fun setOverflowSizeBits(expr: KExpr<KIntSort>, sizeBits: UInt) {
-        overflowSizeBits[expr] = sizeBits
-    }
-
 }
