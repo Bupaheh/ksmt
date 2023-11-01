@@ -624,6 +624,8 @@ open class KContext(
      * */
     fun mkBv64Sort(): KBv64Sort = bv64SortCache
 
+//    fun mkBv100Sort() = mkBvSort(100u)
+
     /**
      * Create a BitVec sort with [sizeBits] bits length (_ BitVec [sizeBits]).
      * */
@@ -2166,6 +2168,45 @@ open class KContext(
     fun <T : KBvSort> KExpr<T>.reductionOr() = mkBvReductionOrExpr(this)
 
     private val bvAndExprCache = mkAstInterner<KBvAndExpr<out KBvSort>>()
+
+    open fun <T : KBvSort> mkBvEqConstAndConstExpr(arg0: Int, arg1: KExpr<T>, arg2: Int) =
+            mkEq(
+                mkBv(arg0, arg1.sort.sizeBits),
+                mkBvAndExpr(
+                    mkBv(arg2, arg1.sort.sizeBits),
+                    arg1.uncheckedCast()
+                )
+            )
+
+    open fun <T : KBvSort> mkBvAndConst(arg0: KExpr<T>, arg1: Int) =
+        mkBvAndExpr(arg0, mkBv(arg1, arg0.sort.sizeBits).uncheckedCast())
+
+    open fun <T : KBvSort> mkBvAndConstShlExpr(arg0: Int, arg1: KExpr<T>, arg2: Int) =
+        mkBvAndExpr(
+            mkBv(arg0, arg1.sort.sizeBits),
+            mkBvShiftLeftExpr(arg1, mkBv(arg2, arg1.sort.sizeBits).uncheckedCast()).uncheckedCast()
+        )
+
+    open fun <T : KBvSort> mkBvAndConstAshrExpr(arg0: Int, arg1: KExpr<T>, arg2: Int) =
+        mkBvAndExpr(
+            mkBv(arg0, arg1.sort.sizeBits),
+            mkBvArithShiftRightExpr(arg1, mkBv(arg2, arg1.sort.sizeBits).uncheckedCast()).uncheckedCast()
+        )
+
+    open fun <T : KBvSort> mkBvAndConstLshrExpr(arg0: Int, arg1: KExpr<T>, arg2: Int) =
+        mkBvAndExpr(
+            mkBv(arg0, arg1.sort.sizeBits),
+            mkBvLogicalShiftRightExpr(arg1, mkBv(arg2, arg1.sort.sizeBits).uncheckedCast()).uncheckedCast()
+        )
+
+    open fun <T : KBvSort> mkBvAndShlExpr(arg0: KExpr<T>, arg1: KExpr<T>, arg2: Int) =
+        mkBvAndExpr(arg0, mkBvShiftLeftExpr(arg1, mkBv(arg2, arg0.sort.sizeBits).uncheckedCast()))
+
+    open fun <T : KBvSort> mkBvAndAshrExpr(arg0: KExpr<T>, arg1: KExpr<T>, arg2: Int) =
+        mkBvAndExpr(arg0, mkBvArithShiftRightExpr(arg1, mkBv(arg2, arg0.sort.sizeBits).uncheckedCast()))
+
+    open fun <T : KBvSort> mkBvAndLshrExpr(arg0: KExpr<T>, arg1: KExpr<T>, arg2: Int) =
+        mkBvAndExpr(arg0, mkBvLogicalShiftRightExpr(arg1, mkBv(arg2, arg0.sort.sizeBits).uncheckedCast()))
 
     /**
      * Create bitwise AND (`bvand`) expression.

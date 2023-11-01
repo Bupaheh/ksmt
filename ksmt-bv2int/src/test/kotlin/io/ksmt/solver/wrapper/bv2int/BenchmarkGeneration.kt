@@ -70,12 +70,12 @@ fun countOperations(decls: HashMap<String, Int>, operations: Set<String>): Int {
     return operations.fold(0) { acc, el -> acc + decls.getOrDefault(el, 0) }
 }
 
-fun readSmtBenchmarkData(
+private inline fun readSmtBenchmarkData(
     ctx: KContext,
     dirPath: String,
     begin: Int = 0,
     end: Int = 5000,
-    limit: Int = 1000
+    filterExpr: (String, KExpr<KBoolSort>) -> Boolean
 ): List<KExpr<KBoolSort>> {
     val parser = KZ3SMTLibParser(ctx)
     val expressions = mutableListOf<KExpr<KBoolSort>>()
@@ -105,7 +105,7 @@ fun readSmtBenchmarkData(
 //                && liaCnt * 0.5 > weirdCnt
 //                && liaCnt * 0.5 > shiftCnt
 
-        if (true) {
+        if (filterExpr(file.path, expr)) {
             expressions.add(expr)
         }
     }
@@ -113,51 +113,22 @@ fun readSmtBenchmarkData(
     return expressions
 }
 
-fun testYices() = with(KContext()) {
-    KYicesSolver(this).use { solver ->
-
-        val a by intSort
-
-        solver.push()
-
-        val expr = (a * mkPowerOfTwoExpr(2u) mod 3.expr) eq 5.expr
-        solver.assert(expr)
-        println(solver.check())
-
-        solver.pop()
-
-        solver.assert(a * mkPowerOfTwoExpr(2u) eq 5.expr)
-        solver.assert(bv8Sort.mkConst("kek") eq mkBv(1, 8u).uncheckedCast())
-        println(solver.check())
-    }
-}
-
 
 
 fun main() = with(KContext()) {
-//    val ctx = KContext()
-//    val expressions = ctx.readFormulas(File("generatedExpressions/QF_BV_wliac"))
-//    val rewriter = KUnsignedToSignedBvRewriter(ctx)
-//
-//    val signedExpressions = expressions.filter {
-//        val decls = KDeclCounter(ctx).countDeclarations(it)
-//        countOperations(decls, liaDecls) > 5
-//    }
-//
-//    writeExpressions(ctx, signedExpressions, "generatedExpressions/QF_BV_wliac")
-
-    val ids = 0..3
+    val ids = 0..11
     val exprs = mutableListOf<KExpr<KBoolSort>>()
     val ctx = KContext()
-    val rewriter = KUnsignedToSignedBvRewriter(ctx)
     for (i in ids) {
         println(i)
-        val ex = ctx.readFormulas(File("generatedExpressions/bv/QF_BV$i"))
+        val ex = ctx.readFormulas(File("generatedExpressions/QF_BV/QF_BV$i"))
         exprs.addAll(ex)
     }
 
-    writeExpressions(ctx, exprs, "generatedExpressions/QF_BV_2000")
+    writeExpressions(ctx, exprs, "generatedExpressions/QF_BV0")
     return
+
+
 //    val ctx = KContext()
 //    val exprs = ctx.readFormulas(File("generatedExpressions/wbslia/QF_BV_wbslia"))
 //
@@ -198,7 +169,13 @@ fun main() = with(KContext()) {
 //    writeExpressions(ctx, expressions, "generatedExpressions/QF_BV_bslia2")
 
 
-    for (i in 2..92) {
+    val smtExprs = File("/home/pvl/Heh/Projects/ksmt/generatedExpressions/QF_BV/SMTcomp2022Exprs.txt")
+        .readLines()
+        .map { path ->
+            path.removePrefix("/non-incremental/")
+        }.toSet()
+
+    for (i in 24..92) {
         val ctx = KContext()
         val step = 500
         val exprs = readSmtBenchmarkData(
@@ -206,10 +183,14 @@ fun main() = with(KContext()) {
             "/home/pvl/Heh/Projects/QF_BV",
             begin = step * i,
             end = step * (i + 1),
-            limit = 10000
+            filterExpr = { path, _ ->
+                val normalizedPath = path.removePrefix("/home/pvl/Heh/Projects/")
+
+                normalizedPath in smtExprs
+            }
         )
 
-        writeExpressions(ctx, exprs, "generatedExpressions/bv/QF_BV$i")
+        writeExpressions(ctx, exprs, "generatedExpressions/QF_BV/QF_BV$i")
     }
 
 //    val params = GenerationParameters(

@@ -72,12 +72,11 @@ open class KExprSimplifier(override val ctx: KContext) :
             else -> expr
         }
 
-    fun <T : KSort> KContext.postRewriteDistinct(args: List<KExpr<T>>): KExpr<KBoolSort> =
-        simplifyDistinctLight(args, KContext::simplifyNot, { l, r -> simplifyEq(l, r, false) }) { args2 ->
-            val distinct = checkAllExpressionsAreDistinct(args2)
+    fun <T : KSort> KContext.postRewriteDistinct(args: List<KExpr<T>>): KExpr<KBoolSort> {
+        val distinct = checkAllExpressionsAreDistinct(args)
 
-            distinct?.expr ?: mkDistinctNoSimplify(args2)
-        }
+        return distinct?.expr ?: mkDistinctNoSimplify(args)
+    }
 
     override fun <T : KSort> transform(expr: KDistinctExpr<T>) =
         simplifyExpr(

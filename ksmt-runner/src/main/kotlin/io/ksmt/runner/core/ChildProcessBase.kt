@@ -32,6 +32,8 @@ abstract class ChildProcessBase<Model> {
     abstract fun Model.setup(astSerializationCtx: AstSerializationCtx, lifetime: Lifetime)
     abstract fun parseArgs(args: Array<String>): KsmtWorkerArgs
 
+    open fun cleanupAfterTermination() {}
+
     fun start(args: Array<String>) = runBlocking {
         val workerArgs = parseArgs(args)
         LoggerFactory.create(workerArgs.logLevel)
@@ -45,6 +47,8 @@ abstract class ChildProcessBase<Model> {
             initiate(def, workerArgs.port)
 
             def.awaitTermination()
+
+            cleanupAfterTermination()
         }
     }
 
