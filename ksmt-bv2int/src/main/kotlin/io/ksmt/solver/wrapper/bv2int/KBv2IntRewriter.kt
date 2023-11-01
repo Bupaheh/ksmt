@@ -114,6 +114,7 @@ import io.ksmt.expr.KFunctionAsArray
 import io.ksmt.expr.KGeArithExpr
 import io.ksmt.expr.KGtArithExpr
 import io.ksmt.expr.KImpliesExpr
+import io.ksmt.expr.KInterpretedValue
 import io.ksmt.expr.KIsIntRealExpr
 import io.ksmt.expr.KIteExpr
 import io.ksmt.expr.KLeArithExpr
@@ -505,6 +506,34 @@ class KBv2IntRewriter(
         )
     }
 
+//    private fun generatePropLemmas(
+//        arg0: KExpr<KIntSort>,
+//        arg1: KExpr<KIntSort>,
+//        sizeBits: UInt,
+//        signedness: Signedness = Signedness.UNSIGNED
+//    ): KExpr<KBoolSort> = with(ctx) {
+//        val application = bv2IntContext.mkBvAndApp(arg0, arg1)
+//        val minusOne = toSignedness(mkPowerOfTwoExpr(sizeBits) - 1.expr, sizeBits, Signedness.UNSIGNED, signedness)
+//
+//        val lazyConstraint = if (isLazyOverflow) {
+//            mkOr(arg0 eq 0.expr, arg0 eq minusOne, arg1 eq 0.expr, arg1 eq minusOne, arg0 eq arg1)
+//        } else {
+//            trueExpr
+//        }
+//
+//        mkAnd(
+////            application le arg0,
+////            application le arg1,
+//            arg0 eq arg1 implies (application eq toUnsigned(arg0, sizeBits, signedness)),
+////            application eq bv2IntContext.mkBvAndApp(arg1, arg0),
+//            arg0 eq 0.expr implies (application eq 0.expr),
+//            arg0 eq minusOne implies (application eq toUnsigned(arg1, sizeBits, signedness)),
+//            arg1 eq 0.expr implies (application eq 0.expr),
+//            arg1 eq minusOne implies (application eq toUnsigned(arg0, sizeBits, signedness)),
+//            lazyConstraint,
+//        )
+//    }
+
     private fun generatePropLemmas(
         arg0: KExpr<KIntSort>,
         arg1: KExpr<KIntSort>,
@@ -582,11 +611,13 @@ class KBv2IntRewriter(
                 }
             }
 
-            when (rewriteMode) {
-                RewriteMode.EAGER -> result
-                RewriteMode.LAZY -> {
-                    val normalizedArg0 = arg0.normalized(Signedness.UNSIGNED)
-                    val normalizedArg1 = arg1.normalized(Signedness.UNSIGNED)
+            when {
+                rewriteMode == RewriteMode.EAGER || result is KInterpretedValue -> result
+                rewriteMode == RewriteMode.LAZY -> {
+                    val normalizedSignedness = Signedness.UNSIGNED
+
+                    val normalizedArg0 = arg0.normalized(normalizedSignedness)
+                    val normalizedArg1 = arg1.normalized(normalizedSignedness)
                     val application = bv2IntContext.mkBvAndApp(normalizedArg0, normalizedArg1)
                     val bvAndLemma = application eq result
 
@@ -595,6 +626,7 @@ class KBv2IntRewriter(
                     application.addBvAndLemma(bvAndLemma)
                         .addLemma(generatePropLemmas(normalizedArg0, normalizedArg1, sizeBits))
                 }
+                else -> error("Unexpected")
             }
         }
     }
@@ -791,7 +823,6 @@ class KBv2IntRewriter(
             )
         } else {
             KBv2IntAuxExprDenormalized(arg0.denormalized * arg1.denormalized, sizeBits)
-
         }
 //        if (!canNormalize(arg0) || !canNormalize(arg1) || signednessMode != SignednessMode.SIGNED) {
 //            return KBv2IntAuxExprDenormalized(arg0.denormalized * arg1.denormalized, sizeBits)

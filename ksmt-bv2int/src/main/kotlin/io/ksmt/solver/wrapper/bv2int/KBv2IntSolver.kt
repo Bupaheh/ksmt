@@ -1,7 +1,6 @@
 package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.KContext
-import io.ksmt.expr.KEqExpr
 import io.ksmt.expr.KExpr
 import io.ksmt.expr.KFunctionApp
 import io.ksmt.expr.KIntNumExpr
@@ -14,10 +13,11 @@ import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.RewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.AndRewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode
 import java.util.*
+import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
-class KBv2IntSolver<Config: KSolverConfiguration>(
+open class KBv2IntSolver<Config: KSolverConfiguration>(
     private val ctx: KContext,
     private val solver: KSolver<Config>,
     private val rewriteMode: RewriteMode = RewriteMode.EAGER,
@@ -32,7 +32,8 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
         }
     }
 
-    var roundCount: Int = 0
+    private var roundCount: Int = 0
+    private var checkTime: Long = 0
 
     private var currentScope: UInt = 0u
     private var lastCheckStatus = KSolverStatus.UNKNOWN
@@ -55,14 +56,6 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
     private var currentAssertedExprs = mutableListOf<KExpr<KBoolSort>>()
     private var currentAssumptions = mutableListOf<KExpr<KBoolSort>>()
     private var originalAssumptions = listOf<KExpr<KBoolSort>>()
-
-    override fun resetCheckTime() {
-        solver.resetCheckTime()
-    }
-
-    override fun getCheckTime(): Long {
-        return solver.getCheckTime()
-    }
 
     override fun assert(expr: KExpr<KBoolSort>) {
         val rewritten = currentRewriter.rewriteBv2Int(expr)
@@ -108,11 +101,18 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
     private fun innerCheck(timeout: Duration): KSolverStatus {
         if (timeout.isNegative()) return KSolverStatus.UNKNOWN
 
-        return if (currentAssumptions.isEmpty()) {
-            solver.check(timeout)
-        } else {
-            solver.checkWithAssumptions(currentAssumptions, timeout)
+        val status: KSolverStatus
+
+        val time = measureNanoTime {
+            status = if (currentAssumptions.isEmpty()) {
+                solver.check(timeout)
+            } else {
+                solver.checkWithAssumptions(currentAssumptions, timeout)
+            }
         }
+
+        checkTime += time
+        return status
     }
 
     private fun signedCheck(timeout: Duration): KSolverStatus {
@@ -133,7 +133,9 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
             val model = solver.model()
 
             currentOverflowLemmas.forEach { overflowLemma ->
-                isCorrect = isCorrect && (model.eval(overflowLemma, true) == ctx.trueExpr)
+                LemmaFlatter.flatLemma(overflowLemma).forEach {
+                    isCorrect = isCorrect && (model.eval(it, true) == ctx.trueExpr)
+                }
             }
         }
 
@@ -206,6 +208,13 @@ class KBv2IntSolver<Config: KSolverConfiguration>(
             signedCheck(timeout)
         }.also { lastCheckStatus = it }
     }
+
+    override fun pop(n: UInt) {
+        checkTime = 0
+        solver.pop(n)
+    }
+
+    override fun reasonOfUnknown(): String = "$checkTime;$roundCount"
 
     override fun model(): KModel {
         require(lastCheckStatus == KSolverStatus.SAT) {

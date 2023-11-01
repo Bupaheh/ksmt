@@ -20,6 +20,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import java.lang.ref.PhantomReference
 import java.lang.ref.ReferenceQueue
 import java.util.*
+import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 import kotlin.time.DurationUnit
 
@@ -44,6 +45,8 @@ open class KZ3Solver(private val ctx: KContext) : KSolver<KZ3SolverConfiguration
         createExprConverter(z3Ctx)
     }
 
+    private var checkTime: Long = 0
+
     open fun createExprInternalizer(z3Ctx: KZ3Context): KZ3ExprInternalizer = KZ3ExprInternalizer(ctx, z3Ctx)
 
     open fun createExprConverter(z3Ctx: KZ3Context) = KZ3ExprConverter(ctx, z3Ctx)
@@ -66,6 +69,9 @@ open class KZ3Solver(private val ctx: KContext) : KSolver<KZ3SolverConfiguration
         require(n <= currentScope) {
             "Can not pop $n scope levels because current scope level is $currentScope"
         }
+
+        checkTime = 0
+
         if (n == 0u) return
 
         solver.pop(n.toInt())
@@ -101,7 +107,14 @@ open class KZ3Solver(private val ctx: KContext) : KSolver<KZ3SolverConfiguration
 
     override fun check(timeout: Duration): KSolverStatus = z3TryCheck {
         solver.updateTimeout(timeout)
-        solver.check().processCheckResult()
+        val status: Status
+
+        val time = measureNanoTime {
+            status = solver.check()
+        }
+        checkTime += time
+
+        status.processCheckResult()
     }
 
     override fun checkWithAssumptions(
@@ -128,8 +141,14 @@ open class KZ3Solver(private val ctx: KContext) : KSolver<KZ3SolverConfiguration
         }
 
         solver.updateTimeout(timeout)
+        val status: Status
 
-        solver.solverCheckAssumptions(z3Assumptions).processCheckResult()
+        val time = measureNanoTime {
+            status = solver.solverCheckAssumptions(z3Assumptions)
+        }
+        checkTime += time
+
+        status.processCheckResult()
     }
 
     override fun model(): KModel = z3Try {
@@ -157,8 +176,9 @@ open class KZ3Solver(private val ctx: KContext) : KSolver<KZ3SolverConfiguration
     }
 
     override fun reasonOfUnknown(): String = z3Try {
-        require(lastCheckStatus == KSolverStatus.UNKNOWN) { "Unknown reason is only available after UNKNOWN checks" }
-        lastReasonOfUnknown ?: solver.reasonUnknown
+//        require(lastCheckStatus == KSolverStatus.UNKNOWN) { "Unknown reason is only available after UNKNOWN checks" }
+//        lastReasonOfUnknown ?: solver.reasonUnknown
+        "$checkTime;1"
     }
 
     override fun interrupt() = z3Try {
