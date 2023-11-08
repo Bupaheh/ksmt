@@ -10,8 +10,10 @@ import io.ksmt.expr.rewrite.KExprUninterpretedDeclCollector
 import io.ksmt.solver.KSolverStatus
 import io.ksmt.solver.cvc5.KCvc5Solver
 import io.ksmt.solver.runner.KSolverRunnerManager
+import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.sort.KBoolSort
+import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KSort
 import io.ksmt.test.GenerationParameters
 import io.ksmt.utils.getValue
@@ -22,14 +24,6 @@ import kotlin.test.Test
 import kotlin.time.Duration.Companion.seconds
 
 class RewriterTests {
-
-    private fun KExpr<*>.tryUnwrap(signedness: Signedness): KExpr<KSort> =
-        if (this is KBv2IntRewriter.KBv2IntAuxExpr) {
-            normalized(signedness)
-        } else {
-            this
-        }.uncheckedCast()
-
     private fun KContext.testInt2BvModelConversion(
         exprs: List<KExpr<KBoolSort>>,
         rewriteMode: KBv2IntRewriter.RewriteMode,
@@ -144,14 +138,54 @@ class RewriterTests {
         println("${timeoutCnt.toDouble() / exprs.size} timeout percentage")
     }
 
-    private fun KExpr<*>.depth(): Int {
-        val expr = this
+    fun KContext.testing(expr: KExpr<KBoolSort>) {
+        val n = bv32Sort.mkConst("nhseznl")
+        val f = bv32Sort.mkConst("frhjnciiz")
+        val s = bv32Sort.mkConst("snssgvwzvj")
 
-        if (expr is KQuantifier) return 1 + expr.body.depth()
+        val fValue = mkBv(1)
+        val nValue = mkBv(2)
+        val sValue = mkBv(31)
 
-        if (expr !is KApp<*, *> || expr.args.isEmpty()) return 1
+        val shl = mkBvShiftLeftExpr(n, s)
+        val neg = mkBvNegationExpr(f)
+        val ule = mkBvUnsignedLessExpr(shl, neg)
+        val not = mkNot(ule)
 
-        return expr.args.map { it.depth() }.max() + 1
+        println(mkBvShiftLeftExpr(nValue, sValue))
+
+        val subexpr = neg
+
+        val constraints = mkAnd(
+            f eq fValue,
+            s eq sValue,
+            n eq nValue
+        )
+
+        KBv2IntSolver(
+            this,
+            KZ3Solver(this),
+            KBv2IntRewriter.RewriteMode.LAZY,
+            KBv2IntRewriter.AndRewriteMode.SUM,
+            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+        ).use { solver ->
+            solver.assert(expr)
+            solver.assert(constraints)
+            println(solver.check())
+            val model = solver.model()
+
+            println(model.eval(subexpr))
+        }
+
+        KZ3Solver(this).use { solver ->
+            solver.assert(not or constraints)
+
+            println(solver.check())
+
+            val model = solver.model()
+
+            println(model.eval(subexpr))
+        }
     }
 
     @Test
@@ -167,16 +201,16 @@ class RewriterTests {
             .enableBvCmp(5.0)
             .enableBvLia(10.0)
             .enableBvShift(2.0)
-//            .enableBvWeird(2.0)
-            .enableBvNia(2.0)
-            .enableBvBitwise(2.0)
-            .setWeight("mkBvAndExpr", 0.4)
+            .enableBvWeird(2.0)
+//            .enableBvNia(2.0)
+//            .enableBvBitwise(2.0)
+//            .setWeight("mkBvAndExpr", 0.4)
             .build()
         val expressions = generateRandomExpressions(
             size = 10000,
-            batchSize = 200,
+            batchSize = 300,
             params = params,
-            random = Random(49),
+            random = Random(53),
             weights = weights,
             isVerbose = false,
         )
@@ -187,55 +221,6 @@ class RewriterTests {
             KBv2IntRewriter.AndRewriteMode.SUM,
             KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
         )
-    }
-
-    fun KContext.testing(expr: KExpr<KBoolSort>) {
-
-        val kVal = mkBv(-1, 64u)
-        val sVal = mkBv(2199023255554, 64u)
-        val yVal = mkBv(-4398046511105, 64u)
-
-        val k = bv64Sort.mkConst("kjmfxzw")
-        val s = bv64Sort.mkConst("sldjlemuku")
-        val y = bv64Sort.mkConst("yybilyil")
-
-        val restrictions = mkAnd(
-            kVal eq k.uncheckedCast(),
-            sVal eq s.uncheckedCast(),
-            yVal eq y.uncheckedCast(),
-        )
-
-        /**
-         * (sldjlemuku, #x0000020000000002)
-         * (kjmfxzw, #xffffffffffffffff)
-         * (yybilyil, #xfffffbffffffffff)
-         */
-
-        KBv2IntSolver(
-            this,
-            KZ3Solver(this),
-            KBv2IntRewriter.RewriteMode.EAGER,
-            KBv2IntRewriter.AndRewriteMode.SUM,
-            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
-        ).use { solver ->
-            solver.assert(expr)
-            solver.assert(restrictions)
-            println(solver.check())
-//            val model = solver.model()
-//
-//            println(model.eval(subExpr))
-        }
-
-
-        KZ3Solver(this).use { solver ->
-            solver.assert(expr)
-            solver.assert(restrictions)
-            println(solver.check())
-            val model = solver.model()
-
-//            println(model.eval(subExpr))
-//            println(mkBv2IntExpr(model.eval(ashr), true))
-        }
     }
 
     @Test
@@ -252,26 +237,24 @@ class RewriterTests {
             .enableBvLia(10.0)
             .enableBvShift(2.0)
 //            .enableBvWeird(2.0)
-            .enableBvNia(2.0)
+//            .enableBvNia(2.0)
             .enableBvBitwise(2.0)
-            .setWeight("mkBvAndExpr", 0.4)
+//            .setWeight("mkBvAndExpr", 0.4)
             .build()
         val expressions = generateRandomExpressions(
             size = 10000,
-            batchSize = 200,
+            batchSize = 300,
             params = params,
-            random = Random(47),
+            random = Random(53),
             weights = weights,
             isVerbose = false,
         )
-
-//        return testing(sublist.single())
 
         testBv2IntModelConversion(
             expressions,
             KBv2IntRewriter.RewriteMode.LAZY,
             KBv2IntRewriter.AndRewriteMode.SUM,
-            KBv2IntRewriter.SignednessMode.UNSIGNED
+            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
         )
     }
 }

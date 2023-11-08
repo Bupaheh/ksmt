@@ -13,8 +13,15 @@ import io.ksmt.expr.KBvNAndExpr
 import io.ksmt.expr.KBvNorExpr
 import io.ksmt.expr.KBvOrExpr
 import io.ksmt.expr.KBvShiftLeftExpr
+import io.ksmt.expr.KBvSignedGreaterExpr
+import io.ksmt.expr.KBvSignedLessExpr
+import io.ksmt.expr.KBvUnsignedGreaterExpr
+import io.ksmt.expr.KBvUnsignedGreaterOrEqualExpr
+import io.ksmt.expr.KBvUnsignedLessExpr
+import io.ksmt.expr.KBvUnsignedLessOrEqualExpr
 import io.ksmt.expr.KBvXNorExpr
 import io.ksmt.expr.KBvXorExpr
+import io.ksmt.expr.KEqExpr
 import io.ksmt.expr.KExpr
 import io.ksmt.expr.KInterpretedValue
 import io.ksmt.expr.rewrite.KExprUninterpretedDeclCollector
@@ -51,20 +58,28 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class TempVisitor(ctx: KContext) : KNonRecursiveTransformer(ctx) {
-    private var flag = false
+    private var cmp = false
+    private var bit = true
 
     override fun <T : KSort, A : KSort> transformApp(expr: KApp<T, A>): KExpr<T> {
+        if (expr.args.any { it is KBvLogicalShiftRightExpr } &&
+            expr.args.any { it is KInterpretedValue } &&
+            (expr is KBvUnsignedLessExpr || expr is KBvUnsignedGreaterExpr ||
+                    expr is KBvUnsignedGreaterOrEqualExpr || expr is KBvUnsignedLessOrEqualExpr)
+        ) {
+            cmp = true
+        }
         return super.transformApp(expr)
     }
 
     fun <T : KSort> visit(expr: KExpr<T>): Boolean {
         apply(expr)
-        return flag
+        return cmp
     }
 
     private fun visitBitwiseOp(lhs: KExpr<*>, rhs: KExpr<*>) {
 
-        flag = true
+        bit = false
 
 //        if (f == "bvshl" && s == "zero_extend") {
 //            flag = false
@@ -260,7 +275,7 @@ class Solver(
 
         val prefix = when (rewriteMode) {
             RewriteMode.EAGER -> "Eager-"
-            RewriteMode.LAZY -> "Lazy-"
+            RewriteMode.LAZY -> "LazyULshr-"
         }
 
         var suffix =  when (andRewriteMode) {
@@ -303,12 +318,13 @@ class KBv2IntCustomSolver(
 )
 
 fun main() {
+//    TODO("check 247, 817, 1093")
     val ctx = KContext()
     val timerMode = TimerMode.CHECK_TIME
     val timeout = 2.seconds
     val expressionsFileName = "QF_BV0"
     val solvers = listOf(
-//        Solver(innerSolver)
+//        Solver(Solver.InnerSolver.Yices),
         Solver(innerSolver, rewriteMode, andRewriteMode, signednessMode),
     )
 
@@ -348,10 +364,16 @@ fun main() {
     )
     val expressions = ctx.readFormulas(File("generatedExpressions/$expressionsFileName"))
         .mapIndexed { id, expr -> id to expr }
-        .filter { (id, _) -> id in 238..1300 }
+        .filter { (id, _) -> id in 0..1300 }
+        .filter { (id, _) -> id in listOf(1093)}
         .filter { TempVisitor(ctx).visit(it.second) }
+        .onEach {
+            println(KDeclCounter(ctx).countDeclarations(it.second))
+        }
+
+
 //        .filter { (id, _) -> id in exprToCheck }
-        .filter { (id, ) -> id !in skipExprs }
+//        .filter { (id, ) -> id !in skipExprs }
 
 //    expressions.forEach { (id, expr) ->
 //        val t = KDeclCounter(ctx).countDeclarations(expr)
@@ -359,24 +381,24 @@ fun main() {
 //    }
 //    return
 //
-//    for (solver in solvers) {
-//        ctx.runBenchmark(
-//            outputFile = File("benchmarkResults/trash.csv"),
-////            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
-//            solver = solver,
-//            expressions = expressions,
-//            repeatNum = 1,
-//            timerMode = timerMode,
-//            timeout = timeout
-//        )
-//    }
-//    Solver.manager.close()
-//    return
+    for (solver in solvers) {
+        ctx.runBenchmark(
+            outputFile = File("benchmarkResults/trash.csv"),
+//            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
+            solver = solver,
+            expressions = expressions,
+            repeatNum = 1,
+            timerMode = timerMode,
+            timeout = timeout
+        )
+    }
+    Solver.manager.close()
+    return
 
 
     for (solver in solvers) {
         ctx.runBenchmark(
-            outputFile = File("benchmarkResults/$expressionsFileName${timerMode}UnbitOp.csv"),
+            outputFile = File("benchmarkResults/$expressionsFileName${timerMode}LshrTest.csv"),
             solver = solver,
             expressions = expressions,
             repeatNum = 1,
