@@ -44,11 +44,6 @@ class KSolverWorkerProcess : ChildProcessBase<SolverProtocolModel>() {
     override fun initProtocolModel(protocol: IProtocol): SolverProtocolModel =
         protocol.solverProtocolModel
 
-    override fun cleanupAfterTermination() {
-        workerSolver?.close()
-        workerCtx?.close()
-    }
-
     @Suppress("LongMethod")
     override fun SolverProtocolModel.setup(astSerializationCtx: AstSerializationCtx, lifetime: Lifetime) {
         initSolver.measureExecutionForTermination { params ->

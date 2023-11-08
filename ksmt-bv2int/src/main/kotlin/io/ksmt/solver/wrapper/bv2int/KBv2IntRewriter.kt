@@ -157,7 +157,6 @@ import io.ksmt.sort.KIntSort
 import io.ksmt.sort.KRealSort
 import io.ksmt.sort.KSort
 import io.ksmt.utils.ArithUtils.bigIntegerValue
-import io.ksmt.utils.BvUtils.toBigIntegerUnsigned
 import io.ksmt.utils.mkFreshConst
 import io.ksmt.utils.normalizeValue
 import io.ksmt.utils.toBigInteger
@@ -722,8 +721,9 @@ class KBv2IntRewriter(
 
     private fun canNormalize(expr: KBv2IntAuxExpr): Boolean =
         expr is KBv2IntAuxExprNormalized || expr is KBv2IntAuxExprSingleOverflow ||
-                expr is KBv2IntAuxExprShift && (expr.shift < 0 || isLazyOverflow) ||
+                expr is KBv2IntAuxExprAshr || expr is KBv2IntAuxExprLshr ||
                 expr is KBv2IntAuxExprExtract && isLazyOverflow ||
+                expr is KBv2IntAuxExprShl && isLazyOverflow ||
                 expr is KBv2IntAuxExprZeroExtension || expr is KBv2IntAuxExprConst ||
                 expr is KBv2IntAuxExprLazySignedness
 
@@ -1022,15 +1022,19 @@ class KBv2IntRewriter(
             op(arg0.normalized(Signedness.SIGNED), arg1.normalized(Signedness.SIGNED))
         }
 
-    override fun <T : KBvSort> transform(expr: KBvUnsignedLessExpr<T>): KExpr<KBoolSort> =
+    private fun rewriteUlt(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = with(ctx) {
+        mkNot(rewriteUge(arg0, arg1))
+    }
+
+    override fun <T : KBvSort> transform(expr: KBvUnsignedLessExpr<T>): KExpr<KBoolSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
-            preprocessMode = None
-        ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
-            rewriteUnsignedCmp(arg0, arg1, KContext::mkArithLt)
-        }
+            preprocessMode = None,
+            transformer = ::rewriteUlt
+        )
+    }
 
     override fun <T : KBvSort> transform(expr: KBvSignedLessExpr<T>): KExpr<KBoolSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(
@@ -1043,15 +1047,43 @@ class KBv2IntRewriter(
         }
     }
 
+    private inline fun KContext.rewriteUleConstLshr(
+        arg0: KBv2IntAuxExpr,
+        arg1: KBv2IntAuxExpr,
+        cont: () -> KExpr<KBoolSort>,
+    ): KExpr<KBoolSort> {
+        val arg0Normalized = arg0.normalized(Signedness.UNSIGNED)
+        val arg1Normalized = arg1.normalized(Signedness.UNSIGNED)
+
+        return when {
+            arg0Normalized is KIntNumExpr && arg1 is KBv2IntAuxExprLshr -> mkArithLe(
+                arg0Normalized * mkPowerOfTwoExpr(arg1.shift.toUInt()),
+                arg1.originalExpr.normalized(Signedness.UNSIGNED)
+            )
+
+            arg0 is KBv2IntAuxExprLshr && arg1Normalized is KIntNumExpr -> mkArithLt(
+                arg0.originalExpr.normalized(Signedness.UNSIGNED),
+                (arg1Normalized  + 1.expr) * mkPowerOfTwoExpr(arg0.shift.toUInt())
+            )
+
+            else -> cont()
+        }
+    }
+
+    private fun rewriteUle(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = with(ctx) {
+        rewriteUleConstLshr(arg0, arg1) {
+            arg0.normalized(Signedness.UNSIGNED) le arg1.normalized(Signedness.UNSIGNED)
+        }
+    }
+
     override fun <T : KBvSort> transform(expr: KBvUnsignedLessOrEqualExpr<T>): KExpr<KBoolSort> =
         transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
-            preprocessMode = None
-        ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
-            rewriteUnsignedCmp(arg0, arg1, KContext::mkArithLe)
-        }
+            preprocessMode = None,
+            transformer = ::rewriteUle
+        )
 
     override fun <T : KBvSort> transform(expr: KBvSignedLessOrEqualExpr<T>): KExpr<KBoolSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(
@@ -1064,15 +1096,16 @@ class KBv2IntRewriter(
         }
     }
 
+    private fun rewriteUge(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = rewriteUle(arg1, arg0)
+
     override fun <T : KBvSort> transform(expr: KBvUnsignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> =
         transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
-            preprocessMode = None
-        ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
-            rewriteUnsignedCmp(arg0, arg1, KContext::mkArithGe)
-        }
+            preprocessMode = None,
+            transformer = ::rewriteUge
+        )
 
     override fun <T : KBvSort> transform(expr: KBvSignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(
@@ -1085,15 +1118,17 @@ class KBv2IntRewriter(
         }
     }
 
+    private fun rewriteUgt(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> =
+        rewriteUlt(arg1, arg0)
+
     override fun <T : KBvSort> transform(expr: KBvUnsignedGreaterExpr<T>): KExpr<KBoolSort> =
         transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
-            preprocessMode = None
-        ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
-            rewriteUnsignedCmp(arg0, arg1, KContext::mkArithGt)
-        }
+            preprocessMode = None,
+            transformer = ::rewriteUgt
+        )
 
     override fun <T : KBvSort> transform(expr: KBvSignedGreaterExpr<T>): KExpr<KBoolSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(
@@ -1255,7 +1290,7 @@ class KBv2IntRewriter(
                         normalized = ctx.tryNormalizeExpr(result, sizeBits, normalizedSignedness, normalizedSignedness),
                         denormalized = result,
                         normalizedSignedness = normalizedSignedness,
-                        originalExpr = arg.denormalized,
+                        originalExpr = arg,
                         shift = normalizedShift.uncheckedCast<_, KIntNumExpr>().bigIntegerValue.toLong(),
                         sizeBits
                     )
@@ -1285,14 +1320,14 @@ class KBv2IntRewriter(
             )
 
             when {
-                shiftRewriteCondition(shift, sizeBits) -> {
+                shiftRewriteCondition(shift, sizeBits) ->
                     KBv2IntAuxExprLshr(
                         normalized = result,
-                        originalExpr = arg.denormalized,
+                        originalExpr = arg,
                         shift = normalizedShift.uncheckedCast<_, KIntNumExpr>().bigIntegerValue.toLong(),
                         sizeBits = sizeBits
                     )
-                }
+
                 else -> result
             }.updatePowerOfTwoMaxArg(sizeBits.toLong() - 1)
         }
@@ -1325,7 +1360,7 @@ class KBv2IntRewriter(
                 shiftRewriteCondition(shift, sizeBits) -> {
                     KBv2IntAuxExprAshr(
                         normalized = result,
-                        originalExpr = arg.denormalized,
+                        originalExpr = arg,
                         sizeBits = sizeBits,
                         defaultBit = mkIte(signCondition, 0.expr, 1.expr),
                         shift = shift.normalized(Signedness.UNSIGNED)
@@ -1995,13 +2030,15 @@ class KBv2IntRewriter(
 
         require(expr is KBv2IntAuxExpr) { "Unexpected" }
 
-        val signedness = if (expr.isNormalizedUnsigned) Signedness.UNSIGNED else Signedness.SIGNED
+//        val signedness = if (expr.isNormalizedUnsigned) Signedness.UNSIGNED else Signedness.SIGNED
 
-        val normalizedValue = (expr as KBv2IntAuxExpr).normalized(signedness)
-        val (lowerBound, upperBound) = getBounds(sort.sizeBits, signedness)
-        val lemma = (normalizedValue ge lowerBound) and (normalizedValue le upperBound)
+        listOf(Signedness.UNSIGNED, Signedness.SIGNED).forEach { signedness ->
+            val normalizedValue = (expr as KBv2IntAuxExpr).normalized(signedness)
+            val (lowerBound, upperBound) = getBounds(sort.sizeBits, signedness)
+            val lemma = (normalizedValue ge lowerBound) and (normalizedValue le upperBound)
 
-        addOverflowLemma(lemma)
+            addOverflowLemma(lemma)
+        }
 
         expr
     }
@@ -2363,8 +2400,8 @@ class KBv2IntRewriter(
         private val normalized: KExpr<KIntSort>,
         override val denormalized: KExpr<KIntSort>,
         private val normalizedSignedness: Signedness,
-        originalExpr: KExpr<KIntSort>,
-        shift: Long,
+        originalExpr: KBv2IntAuxExpr,
+        override val shift: Long,
         sizeBits: UInt,
     ) : KBv2IntAuxExprShift(
         originalExpr,
@@ -2384,8 +2421,8 @@ class KBv2IntRewriter(
 
     private class KBv2IntAuxExprAshr(
         normalized: KExpr<KIntSort>,
-        originalExpr: KExpr<KIntSort>,
-        shift: Long,
+        originalExpr: KBv2IntAuxExpr,
+        override val shift: Long,
         defaultBit: KExpr<KIntSort>,
         sizeBits: UInt,
     ) : KBv2IntAuxExprShift(
@@ -2408,8 +2445,8 @@ class KBv2IntRewriter(
 
     private class KBv2IntAuxExprLshr(
         normalized: KExpr<KIntSort>,
-        originalExpr: KExpr<KIntSort>,
-        shift: Long,
+        originalExpr: KBv2IntAuxExpr,
+        override val shift: Long,
         sizeBits: UInt,
     ) : KBv2IntAuxExprShift(
         originalExpr,
@@ -2428,25 +2465,27 @@ class KBv2IntRewriter(
     }
 
     abstract class KBv2IntAuxExprShift(
-        private val originalExpr: KExpr<KIntSort>,
-        val shift: Long,
-        val defaultBit: KExpr<KIntSort>,
+        val originalExpr: KBv2IntAuxExpr,
+        private val normalizedShift: Long,
+        private val defaultBit: KExpr<KIntSort>,
         sizeBits: UInt,
     ) : KBv2IntAuxExpr(originalExpr.ctx, sizeBits) {
+        abstract val shift: Long
+
         override fun extractBit(bit: UInt): KExpr<KIntSort> = with(ctx) {
-            if (bit.toLong() < shift || bit.toLong() - shift >= sizeBits.toLong()) {
+            if (bit.toLong() < normalizedShift || bit.toLong() - normalizedShift >= sizeBits.toLong()) {
                 return defaultBit
             } else {
-                mkIntExtractBit(originalExpr, (bit.toLong() - shift).toUInt())
+                mkIntExtractBit(originalExpr.denormalized, (bit.toLong() - normalizedShift).toUInt())
             }
         }
 
         override fun extractBits(high: UInt, low: UInt): KExpr<KIntSort> = with(ctx) {
-            if (high.toLong() < shift) return defaultBit
+            if (high.toLong() < normalizedShift) return defaultBit
 
-            val minBit = max(low.toLong() - shift, 0L).toUInt()
-            val maxBit = min(high.toLong() - shift, sizeBits.toLong() - 1L).toUInt()
-            val offset = max(shift - low.toLong(), 0L).toUInt()
+            val minBit = max(low.toLong() - normalizedShift, 0L).toUInt()
+            val maxBit = min(high.toLong() - normalizedShift, sizeBits.toLong() - 1L).toUInt()
+            val offset = max(normalizedShift - low.toLong(), 0L).toUInt()
             val originalBitsNum = max(maxBit.toLong() - minBit.toLong() + 1L, 0L).toUInt()
             val higherBitsNum = high - low + 1u - originalBitsNum
             val higherBits = mkIte(
@@ -2454,7 +2493,7 @@ class KBv2IntRewriter(
                 trueBranch = mkPowerOfTwoExpr(higherBitsNum) - 1.expr,
                 falseBranch = 0.expr,
             ) * mkPowerOfTwoExpr(originalBitsNum)
-            val originalBits = mkIntExtractBits(originalExpr, maxBit, minBit)
+            val originalBits = mkIntExtractBits(originalExpr.denormalized, maxBit, minBit)
 
             (originalBits + higherBits) * mkPowerOfTwoExpr(offset)
         }
