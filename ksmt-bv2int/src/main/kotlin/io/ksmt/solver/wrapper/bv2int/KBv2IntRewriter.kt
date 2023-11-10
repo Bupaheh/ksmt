@@ -290,68 +290,28 @@ class KBv2IntRewriter(
         }
     }
 
-    private fun <T : KBvSort> transformBvAndBitwiseEq(
-        expr: KExpr<KBoolSort>,
-        bvand: KBvAndExpr<T>,
-        other: KExpr<T>
-    ): KExpr<KBoolSort> = with(ctx) {
-        transformExprAfterTransformedBv2Int(
-            expr = expr,
-            dependency0 = bvand.arg0,
-            dependency1 = bvand.arg1,
-            dependency2 = other,
-            preprocessMode = None,
-            checkOverflow = signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS
-        ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr, other: KBv2IntAuxExpr ->
-            val sizeBits = bvand.sort.sizeBits
-            val denormalizedOther = other.denormalized
+    private fun <T : KSort> rewriteEq(lhs: KExpr<T>, rhs: KExpr<T>): KExpr<KBoolSort> = with(ctx) {
+        if (lhs !is KBv2IntAuxExpr || rhs !is KBv2IntAuxExpr) return lhs eq rhs
 
-            when {
-                bvand.arg0 is KBitVecValue<*> ->
-                    rewriteBvAndBitwiseConst(
-                        bvand.arg0.uncheckedCast(),
-                        arg1,
-                        denormalizedOther
-                    )
-                bvand.arg1 is KBitVecValue<*> ->
-                    rewriteBvAndBitwiseConst(
-                        bvand.arg1.uncheckedCast(),
-                        arg0,
-                        denormalizedOther
-                    )
-                else -> mkAnd(
-                    (0u until sizeBits).map {
-                        mkIntBvAndBitwise(arg0, arg1, denormalizedOther, it)
-                    }
-                )
-            }
-        }.uncheckedCast()
+        val signedness = when {
+            lhs.isNormalizedUnsigned && rhs.isNormalizedUnsigned -> Signedness.UNSIGNED
+            lhs.isNormalizedSigned && rhs.isNormalizedSigned -> Signedness.SIGNED
+            lhs.isNormalizedUnsigned -> Signedness.UNSIGNED
+            else -> Signedness.SIGNED
+        }
+
+        lhs.normalized(signedness) eq rhs.normalized(signedness)
     }
 
     override fun <T : KSort> transform(expr: KEqExpr<T>): KExpr<KBoolSort> = with(ctx) {
-        val lhs = expr.lhs
-        val rhs = expr.rhs
-        when {
-            lhs is KBvAndExpr && andRewriteMode == AndRewriteMode.BITWISE && rewriteMode == RewriteMode.EAGER ->
-                transformBvAndBitwiseEq<KBvSort>(expr, lhs.uncheckedCast(), rhs.uncheckedCast())
-            rhs is KBvAndExpr && andRewriteMode == AndRewriteMode.BITWISE && rewriteMode == RewriteMode.EAGER ->
-                transformBvAndBitwiseEq<KBvSort>(expr, rhs.uncheckedCast(), lhs.uncheckedCast())
-            else -> {
-                transformExprAfterTransformedBv2Int(
-                    expr = expr,
-                    dependency0 = expr.lhs,
-                    dependency1 = expr.rhs,
-                    preprocessMode = None,
-                    postRewriteMode = None,
-                ) { arg0: KExpr<KSort>, arg1: KExpr<KSort> ->
-                    if (arg0 is KBv2IntAuxExpr) {
-                        rewriteSignedCmp(arg0, arg1.uncheckedCast(), ::mkEq)
-                    } else {
-                        arg0.preprocessArg(Normalized(signedness)) eq arg1.preprocessArg(Normalized(signedness))
-                    }
-                }
-            }
-        }
+        transformExprAfterTransformedBv2Int<_, KExpr<T>, KExpr<T>>(
+            expr = expr,
+            dependency0 = expr.lhs,
+            dependency1 = expr.rhs,
+            preprocessMode = None,
+            postRewriteMode = None,
+            transformer = ::rewriteEq
+        )
     }
 
 
@@ -478,7 +438,6 @@ class KBv2IntRewriter(
         }
 
     private fun KContext.mkIntBvAnd(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr, bit: UInt): KExpr<KIntSort> {
-//        return (arg0 / mkPowerOfTwoExpr(bit) mod 2.expr) * (arg1 / mkPowerOfTwoExpr(bit) mod 2.expr)
         return mkIte(
             condition = mkOr(
                 arg0.extractBit(bit) eq 0.expr,
@@ -762,8 +721,8 @@ class KBv2IntRewriter(
             checkOverflow = true
         ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
             rewriteLia(
-                normalizedSignednessArgsValue = arg0.normalized(signedness) + arg1.normalized(signedness),
-                denormalizedValue = arg0.denormalized + arg1.denormalized,
+                normalizedSignednessArgsValue = mkArithAddNoSimplify(listOf(arg0.normalized(signedness), arg1.normalized(signedness))),
+                denormalizedValue = mkArithAddNoSimplify(listOf(arg0.denormalized, arg1.denormalized)),
                 canNormalize = canNormalize(arg0) && canNormalize(arg1),
                 sizeBits = expr.sort.sizeBits
             )
@@ -780,8 +739,8 @@ class KBv2IntRewriter(
             checkOverflow = true
         ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
             rewriteLia(
-                normalizedSignednessArgsValue = arg0.normalized(signedness) - arg1.normalized(signedness),
-                denormalizedValue = arg0.denormalized - arg1.denormalized,
+                normalizedSignednessArgsValue = mkArithSubNoSimplify(listOf(arg0.normalized(signedness), arg1.normalized(signedness))),
+                denormalizedValue = mkArithSubNoSimplify(listOf(arg0.denormalized, arg1.denormalized)),
                 canNormalize = canNormalize(arg0) && canNormalize(arg1),
                 sizeBits = expr.sort.sizeBits
             )
@@ -975,53 +934,6 @@ class KBv2IntRewriter(
         }
     }
 
-    private inline fun rewriteUnsignedCmp(
-        arg0: KBv2IntAuxExpr,
-        arg1: KBv2IntAuxExpr,
-        op: KContext.(KExpr<KIntSort>, KExpr<KIntSort>) -> KExpr<KBoolSort>
-    ): KExpr<KBoolSort> = with(ctx) {
-//        return op(arg0.normalized(Signedness.UNSIGNED), arg1.normalized(Signedness.UNSIGNED))
-        when {
-            arg0.isNormalizedUnsigned || arg1.isNormalizedUnsigned ->
-                op(arg0.normalized(Signedness.UNSIGNED), arg1.normalized(Signedness.UNSIGNED))
-            else -> {
-                val signedArg0 = arg0.normalized(Signedness.SIGNED)
-                val signedArg1 = arg1.normalized(Signedness.SIGNED)
-
-                val condition = mkOr(
-                    signedArg0 ge 0.expr and (signedArg1 ge 0.expr),
-                    signedArg0 lt 0.expr and (signedArg1 lt 0.expr)
-                )
-
-                mkIte(
-                    condition,
-                    op(signedArg0, signedArg1),
-                    op(signedArg1, signedArg0)
-                )
-            }
-        }
-    }
-
-    private inline fun rewriteSignedCmp(
-        arg0: KBv2IntAuxExpr,
-        arg1: KBv2IntAuxExpr,
-        crossinline op: (KExpr<KIntSort>, KExpr<KIntSort>) -> KExpr<KBoolSort>
-    ): KExpr<KBoolSort> =
-        if (signednessMode == SignednessMode.SIGNED) {
-            when {
-                arg0 is KBv2IntAuxExprSingleOverflow && arg1 is KBv2IntAuxExprSingleOverflow ->
-                    arg0.normalizedOp { a0 -> arg1.normalizedOp { a1 -> op(a0, a1) } }
-                arg0 is KBv2IntAuxExprSingleOverflow -> arg0.normalizedOp { arg -> op(arg, arg1.normalized(Signedness.SIGNED)) }
-                arg1 is KBv2IntAuxExprSingleOverflow -> arg1.normalizedOp { arg -> op(arg0.normalized(Signedness.SIGNED), arg) }
-                else -> op(arg0.normalized(Signedness.SIGNED), arg1.normalized(Signedness.SIGNED))
-            }
-        } else {
-//            println("tut")
-//            println(ctx.evalInt(arg0.normalized(Signedness.SIGNED)))
-//            println(ctx.evalInt(arg1.normalized(Signedness.SIGNED)))
-            op(arg0.normalized(Signedness.SIGNED), arg1.normalized(Signedness.SIGNED))
-        }
-
     private fun rewriteUlt(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = with(ctx) {
         mkNot(rewriteUge(arg0, arg1))
     }
@@ -1036,22 +948,20 @@ class KBv2IntRewriter(
         )
     }
 
-    override fun <T : KBvSort> transform(expr: KBvSignedLessExpr<T>): KExpr<KBoolSort> = with(ctx) {
-        transformExprAfterTransformedBv2Int(
-            expr,
-            expr.arg0,
-            expr.arg1,
-            None,
-        ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
-            rewriteSignedCmp(arg0, arg1, ::mkArithLt)
-        }
+    private fun rewriteSlt(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = with(ctx) {
+        mkNot(rewriteSge(arg0, arg1))
     }
 
-    private inline fun KContext.rewriteUleConstLshr(
-        arg0: KBv2IntAuxExpr,
-        arg1: KBv2IntAuxExpr,
-        cont: () -> KExpr<KBoolSort>,
-    ): KExpr<KBoolSort> {
+    override fun <T : KBvSort> transform(expr: KBvSignedLessExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2Int(
+            expr = expr,
+            dependency0 = expr.arg0,
+            dependency1 = expr.arg1,
+            preprocessMode = None,
+            transformer = ::rewriteSlt
+        )
+
+    private fun KContext.tryRewriteUleConstLshr(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort>? {
         val arg0Normalized = arg0.normalized(Signedness.UNSIGNED)
         val arg1Normalized = arg1.normalized(Signedness.UNSIGNED)
 
@@ -1066,9 +976,15 @@ class KBv2IntRewriter(
                 (arg1Normalized  + 1.expr) * mkPowerOfTwoExpr(arg0.shift.toUInt())
             )
 
-            else -> cont()
+            else -> null
         }
     }
+
+    private inline fun KContext.rewriteUleConstLshr(
+        arg0: KBv2IntAuxExpr,
+        arg1: KBv2IntAuxExpr,
+        cont: () -> KExpr<KBoolSort>,
+    ): KExpr<KBoolSort> = tryRewriteUleConstLshr(arg0, arg1) ?: cont()
 
     private fun rewriteUle(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = with(ctx) {
         rewriteUleConstLshr(arg0, arg1) {
@@ -1085,16 +1001,103 @@ class KBv2IntRewriter(
             transformer = ::rewriteUle
         )
 
-    override fun <T : KBvSort> transform(expr: KBvSignedLessOrEqualExpr<T>): KExpr<KBoolSort> = with(ctx) {
-        transformExprAfterTransformedBv2Int(
-            expr,
-            expr.arg0,
-            expr.arg1,
-            None,
-        ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
-            rewriteSignedCmp(arg0, arg1, ::mkArithLe)
+//    return when {
+//        arg0Normalized is KIntNumExpr && arg1 is KBv2IntAuxExprLshr -> mkArithLe(
+//        arg0Normalized * mkPowerOfTwoExpr(arg1.shift.toUInt()),
+//        arg1.originalExpr.normalized(Signedness.UNSIGNED)
+//        )
+//
+//        arg0 is KBv2IntAuxExprLshr && arg1Normalized is KIntNumExpr -> mkArithLt(
+//        arg0.originalExpr.normalized(Signedness.UNSIGNED),
+//        (arg1Normalized  + 1.expr) * mkPowerOfTwoExpr(arg0.shift.toUInt())
+//        )
+//
+//        else -> null
+//    }
+
+    private fun KContext.tryRewriteSleConstAshr(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort>? {
+        val arg0Normalized = arg0.normalized(Signedness.SIGNED)
+        val arg1Normalized = arg1.normalized(Signedness.SIGNED)
+
+        return when {
+            arg0Normalized is KIntNumExpr && arg1 is KBv2IntAuxExprAshr -> mkArithLe(
+                arg0Normalized * mkPowerOfTwoExpr(arg1.shift.toUInt()),
+                arg1.originalExpr.normalized(Signedness.SIGNED)
+            )
+
+            arg0 is KBv2IntAuxExprAshr && arg1Normalized is KIntNumExpr -> mkArithLt(
+                arg0.originalExpr.normalized(Signedness.SIGNED),
+                (arg1Normalized  + 1.expr) * mkPowerOfTwoExpr(arg0.shift.toUInt())
+            )
+
+            else -> null
         }
     }
+
+    private fun KContext.tryRewriteSleConstLshr(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort>? {
+        val arg0Normalized = arg0.normalized(Signedness.SIGNED)
+        val arg1Normalized = arg1.normalized(Signedness.SIGNED)
+
+        when {
+            arg0Normalized is KIntNumExpr && arg1 is KBv2IntAuxExprLshr ->
+                if (arg0Normalized le 0.expr == trueExpr) {
+                    return trueExpr
+                }
+
+            arg0 is KBv2IntAuxExprLshr && arg1Normalized is KIntNumExpr ->
+                if (arg1Normalized lt 0.expr == trueExpr) {
+                    return falseExpr
+                }
+
+            else -> return null
+        }
+
+        return tryRewriteUleConstLshr(arg0, arg1)
+    }
+
+    private inline fun KContext.rewriteSleConstAshr(
+        arg0: KBv2IntAuxExpr,
+        arg1: KBv2IntAuxExpr,
+        cont: () -> KExpr<KBoolSort>,
+    ): KExpr<KBoolSort> = tryRewriteSleConstAshr(arg0, arg1) ?: cont()
+
+    private inline fun KContext.rewriteSleConstLshr(
+        arg0: KBv2IntAuxExpr,
+        arg1: KBv2IntAuxExpr,
+        cont: () -> KExpr<KBoolSort>,
+    ): KExpr<KBoolSort> = tryRewriteSleConstLshr(arg0, arg1) ?: cont()
+
+    private inline fun KContext.rewriteSleSingleOverflow(
+        arg0: KBv2IntAuxExpr,
+        arg1: KBv2IntAuxExpr,
+        cont: () -> KExpr<KBoolSort>,
+    ): KExpr<KBoolSort> =
+        when {
+            arg0 is KBv2IntAuxExprSingleOverflow && arg1 is KBv2IntAuxExprSingleOverflow ->
+                arg0.normalizedOp { a0 -> arg1.normalizedOp { a1 -> a0 le a1 } }
+            arg0 is KBv2IntAuxExprSingleOverflow -> arg0.normalizedOp { arg -> arg le arg1.normalized(Signedness.SIGNED) }
+            arg1 is KBv2IntAuxExprSingleOverflow -> arg1.normalizedOp { arg -> arg0.normalized(Signedness.SIGNED) le arg }
+            else -> cont()
+        }
+
+    private fun rewriteSle(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = with(ctx) {
+        rewriteSleConstLshr(arg0, arg1) {
+            rewriteSleConstAshr(arg0, arg1) {
+                rewriteSleSingleOverflow(arg0, arg1) {
+                    arg0.normalized(Signedness.SIGNED) le arg1.normalized(Signedness.SIGNED)
+                }
+            }
+        }
+    }
+
+    override fun <T : KBvSort> transform(expr: KBvSignedLessOrEqualExpr<T>): KExpr<KBoolSort> =
+        transformExprAfterTransformedBv2Int(
+            expr = expr,
+            dependency0 = expr.arg0,
+            dependency1 = expr.arg1,
+            preprocessMode = None,
+            transformer = ::rewriteSle
+        )
 
     private fun rewriteUge(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = rewriteUle(arg1, arg0)
 
@@ -1107,16 +1110,16 @@ class KBv2IntRewriter(
             transformer = ::rewriteUge
         )
 
-    override fun <T : KBvSort> transform(expr: KBvSignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> = with(ctx) {
+    private fun rewriteSge(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = rewriteSle(arg1, arg0)
+
+    override fun <T : KBvSort> transform(expr: KBvSignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> =
         transformExprAfterTransformedBv2Int(
-            expr,
-            expr.arg0,
-            expr.arg1,
-            None,
-        ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
-            rewriteSignedCmp(arg0, arg1, ::mkArithGe)
-        }
-    }
+            expr = expr,
+            dependency0 = expr.arg0,
+            dependency1 = expr.arg1,
+            preprocessMode = None,
+            transformer = ::rewriteSge
+        )
 
     private fun rewriteUgt(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> =
         rewriteUlt(arg1, arg0)
@@ -1130,16 +1133,17 @@ class KBv2IntRewriter(
             transformer = ::rewriteUgt
         )
 
-    override fun <T : KBvSort> transform(expr: KBvSignedGreaterExpr<T>): KExpr<KBoolSort> = with(ctx) {
+    private fun rewriteSgt(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> =
+        rewriteSlt(arg1, arg0)
+
+    override fun <T : KBvSort> transform(expr: KBvSignedGreaterExpr<T>): KExpr<KBoolSort> =
         transformExprAfterTransformedBv2Int(
-            expr,
-            expr.arg0,
-            expr.arg1,
-            None
-        ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
-            rewriteSignedCmp(arg0, arg1, ::mkArithGt)
-        }
-    }
+            expr = expr,
+            dependency0 = expr.arg0,
+            dependency1 = expr.arg1,
+            preprocessMode = None,
+            transformer = ::rewriteSgt
+        )
 
     override fun transform(expr: KBvConcatExpr): KExpr<KBvSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(

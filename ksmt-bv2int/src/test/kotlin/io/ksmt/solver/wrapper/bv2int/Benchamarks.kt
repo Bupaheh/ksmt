@@ -7,14 +7,15 @@ import io.ksmt.KContext
 import io.ksmt.expr.KApp
 import io.ksmt.expr.KBvAndExpr
 import io.ksmt.expr.KBvArithShiftRightExpr
-import io.ksmt.expr.KBvExtractExpr
 import io.ksmt.expr.KBvLogicalShiftRightExpr
 import io.ksmt.expr.KBvNAndExpr
 import io.ksmt.expr.KBvNorExpr
 import io.ksmt.expr.KBvOrExpr
 import io.ksmt.expr.KBvShiftLeftExpr
 import io.ksmt.expr.KBvSignedGreaterExpr
+import io.ksmt.expr.KBvSignedGreaterOrEqualExpr
 import io.ksmt.expr.KBvSignedLessExpr
+import io.ksmt.expr.KBvSignedLessOrEqualExpr
 import io.ksmt.expr.KBvUnsignedGreaterExpr
 import io.ksmt.expr.KBvUnsignedGreaterOrEqualExpr
 import io.ksmt.expr.KBvUnsignedLessExpr
@@ -24,16 +25,12 @@ import io.ksmt.expr.KBvXorExpr
 import io.ksmt.expr.KEqExpr
 import io.ksmt.expr.KExpr
 import io.ksmt.expr.KInterpretedValue
-import io.ksmt.expr.rewrite.KExprUninterpretedDeclCollector
-import io.ksmt.expr.rewrite.simplify.KExprSimplifier
 import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.runner.serializer.AstSerializationCtx
 import io.ksmt.solver.KSolver
 import io.ksmt.solver.KSolverStatus
 import io.ksmt.solver.bitwuzla.KBitwuzlaSolver
 import io.ksmt.solver.cvc5.KCvc5Solver
-import io.ksmt.solver.cvc5.KCvc5SolverConfiguration
-import io.ksmt.solver.cvc5.KCvc5SolverUniversalConfiguration
 import io.ksmt.solver.runner.KSolverRunnerManager
 import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3Solver
@@ -43,16 +40,11 @@ import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.RewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.AndRewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode
 import io.ksmt.solver.yices.KYicesSolverConfiguration
-import io.ksmt.solver.yices.KYicesSolverConfigurationImpl
 import io.ksmt.solver.yices.KYicesSolverUniversalConfiguration
-import io.ksmt.solver.z3.KZ3SolverConfiguration
-import io.ksmt.solver.z3.KZ3SolverUniversalConfiguration
 import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KSort
-import io.ksmt.utils.getValue
 import io.ksmt.utils.mkConst
 import java.io.File
-import kotlin.random.Random
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -62,10 +54,17 @@ class TempVisitor(ctx: KContext) : KNonRecursiveTransformer(ctx) {
     private var bit = true
 
     override fun <T : KSort, A : KSort> transformApp(expr: KApp<T, A>): KExpr<T> {
-        if (expr.args.any { it is KBvLogicalShiftRightExpr } &&
-            expr.args.any { it is KInterpretedValue } &&
+        if (expr.args.any { it is KInterpretedValue } &&
+
+            (expr.args.any { it is KBvLogicalShiftRightExpr && it.shift is KInterpretedValue } &&
             (expr is KBvUnsignedLessExpr || expr is KBvUnsignedGreaterExpr ||
-                    expr is KBvUnsignedGreaterOrEqualExpr || expr is KBvUnsignedLessOrEqualExpr)
+                    expr is KBvUnsignedGreaterOrEqualExpr || expr is KBvUnsignedLessOrEqualExpr ||
+                    expr is KBvSignedLessExpr || expr is KBvSignedGreaterExpr ||
+                    expr is KBvSignedGreaterOrEqualExpr || expr is KBvSignedLessOrEqualExpr || expr is KEqExpr) ||
+
+            expr.args.any { it is KBvArithShiftRightExpr && it.shift is KInterpretedValue } &&
+            (expr is KBvSignedLessExpr || expr is KBvSignedGreaterExpr ||
+                    expr is KBvSignedGreaterOrEqualExpr || expr is KBvSignedLessOrEqualExpr || expr is KEqExpr))
         ) {
             cmp = true
         }
@@ -167,7 +166,7 @@ enum class TimerMode {
 
 private fun KContext.measureAssertTime(
     expr: KExpr<KBoolSort>,
-    solverDescription: Solver,
+    solverDescription: SolverConfiguration,
     timerMode: TimerMode,
     timeout: Duration
 ): MeasureAssertTimeResult {
@@ -201,7 +200,7 @@ private fun KContext.measureAssertTime(
 
 private fun KContext.runBenchmark(
     outputFile: File,
-    solver: Solver,
+    solverConfiguration: SolverConfiguration,
     expressions: List<Pair<Int, KExpr<KBoolSort>>>,
     repeatNum: Int,
     timerMode: TimerMode,
@@ -211,98 +210,19 @@ private fun KContext.runBenchmark(
         repeat(repeatNum) { repeatIdx ->
             println("$exprId\t$repeatIdx")
 
-            val res = measureAssertTime(expr, solver, timerMode, timeout)
+            val res = measureAssertTime(expr, solverConfiguration, timerMode, timeout)
             if (res.roundCnt == -2) return@forEach
 
             println(res)
 
-            outputFile.appendText("$exprId,$repeatIdx,$solver,${res.status},${res.nanoTime},${res.roundCnt}\n")
+            outputFile.appendText("$exprId,$repeatIdx,$solverConfiguration,${res.status},${res.nanoTime},${res.roundCnt}\n")
 
             if (res.status == KSolverStatus.UNKNOWN) return@forEach
         }
     }
 }
 
-class Solver(
-    private val solver: InnerSolver,
-    private val rewriteMode: RewriteMode? = null,
-    private val andRewriteMode: AndRewriteMode = AndRewriteMode.SUM,
-    private val signednessMode: SignednessMode = SignednessMode.UNSIGNED
-) {
-    enum class InnerSolver {
-        Z3,
-        CVC5,
-        Yices,
-        Bitwuzla;
-
-        fun construct(ctx: KContext) =
-            when (this) {
-                Z3 -> manager.createSolver(ctx, KZ3Solver::class)
-                CVC5 -> manager.createSolver(ctx, KCvc5Solver::class)
-                Yices -> manager.createSolver(ctx, KYicesSolver::class)
-                Bitwuzla -> KBitwuzlaSolver(ctx)
-            }
-
-        override fun toString(): String =
-            when (this) {
-                Z3 -> "Z3"
-                CVC5 -> "cvc5"
-                Yices -> "Yices"
-                Bitwuzla -> "Bitwuzla"
-            }
-    }
-
-    fun construct(ctx: KContext): KSolver<*>  = with(ctx) {
-        val result = if (rewriteMode == null) {
-            solver.construct(ctx)
-        } else {
-            manager.createSolver(ctx, KBv2IntCustomSolver::class)
-        }
-
-        if (solver == InnerSolver.Z3) {
-            result.push()
-            result.assert(boolSort.mkConst("a"))
-            result.check()
-            result.pop()
-        }
-
-        result
-    }
-
-    override fun toString(): String {
-        val innerSolver = solver.toString()
-        if (rewriteMode == null) return innerSolver
-
-        val prefix = when (rewriteMode) {
-            RewriteMode.EAGER -> "Eager-"
-            RewriteMode.LAZY -> "LazyULshr-"
-        }
-
-        var suffix =  when (andRewriteMode) {
-            AndRewriteMode.SUM -> "-Sum"
-            AndRewriteMode.BITWISE -> "-Bitwise"
-        }
-
-        suffix += when (signednessMode) {
-            SignednessMode.UNSIGNED -> ""
-            SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflow"
-            SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
-            SignednessMode.SIGNED -> "-Signed"
-        }
-
-        return prefix + innerSolver + suffix
-    }
-
-    companion object {
-        val manager = KSolverRunnerManager(hardTimeout = 5.seconds, workerProcessIdleTimeout = 40.seconds)
-
-        init {
-            manager.registerSolver(KBv2IntCustomSolver::class, KYicesSolverUniversalConfiguration::class)
-        }
-    }
-}
-
-val innerSolver = Solver.InnerSolver.Yices
+val innerSolver = SolverConfiguration.InnerSolver.Yices
 val rewriteMode = RewriteMode.LAZY
 val andRewriteMode = AndRewriteMode.SUM
 val signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW
@@ -318,14 +238,13 @@ class KBv2IntCustomSolver(
 )
 
 fun main() {
-//    TODO("check 247, 817, 1093")
     val ctx = KContext()
     val timerMode = TimerMode.CHECK_TIME
     val timeout = 2.seconds
     val expressionsFileName = "QF_BV0"
     val solvers = listOf(
-//        Solver(Solver.InnerSolver.Yices),
-        Solver(innerSolver, rewriteMode, andRewriteMode, signednessMode),
+        SolverConfiguration(SolverConfiguration.InnerSolver.CVC5),
+//        SolverConfiguration(innerSolver, rewriteMode, andRewriteMode, signednessMode),
     )
 
 //    val skipExprs = listOf(133, 237, 325, 416, 471, 553, 687, 701, 710, 826, 852, 984, 994, 1064, 1108)
@@ -365,12 +284,9 @@ fun main() {
     val expressions = ctx.readFormulas(File("generatedExpressions/$expressionsFileName"))
         .mapIndexed { id, expr -> id to expr }
         .filter { (id, _) -> id in 0..1300 }
-        .filter { (id, _) -> id in listOf(1093)}
         .filter { TempVisitor(ctx).visit(it.second) }
-        .onEach {
-            println(KDeclCounter(ctx).countDeclarations(it.second))
-        }
 
+//    return println(expressions.size)
 
 //        .filter { (id, _) -> id in exprToCheck }
 //        .filter { (id, ) -> id !in skipExprs }
@@ -381,31 +297,31 @@ fun main() {
 //    }
 //    return
 //
-    for (solver in solvers) {
-        ctx.runBenchmark(
-            outputFile = File("benchmarkResults/trash.csv"),
-//            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
-            solver = solver,
-            expressions = expressions,
-            repeatNum = 1,
-            timerMode = timerMode,
-            timeout = timeout
-        )
-    }
-    Solver.manager.close()
-    return
+//    for (solver in solvers) {
+//        ctx.runBenchmark(
+//            outputFile = File("benchmarkResults/trash.csv"),
+////            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
+//            solver = solver,
+//            expressions = expressions,
+//            repeatNum = 1,
+//            timerMode = timerMode,
+//            timeout = timeout
+//        )
+//    }
+//    Solver.manager.close()
+//    return
 
 
     for (solver in solvers) {
         ctx.runBenchmark(
-            outputFile = File("benchmarkResults/$expressionsFileName${timerMode}LshrTest.csv"),
-            solver = solver,
+            outputFile = File("benchmarkResults/$expressionsFileName${timerMode}shrTest.csv"),
+            solverConfiguration = solver,
             expressions = expressions,
-            repeatNum = 1,
+            repeatNum = 3,
             timerMode = timerMode,
             timeout
         )
     }
 
-    Solver.manager.close()
+    SolverConfiguration.manager.close()
 }

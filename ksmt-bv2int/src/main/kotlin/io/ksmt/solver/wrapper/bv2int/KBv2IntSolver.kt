@@ -74,6 +74,10 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         }
     }
 
+    override fun assert(exprs: List<KExpr<KBoolSort>>) {
+        exprs.forEach { assert(it) }
+    }
+
     private fun reassertExpressions() {
         solver.pop()
         solver.push()
@@ -154,12 +158,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         currentAssumptions = originalAssumptions.map { unsatRewriter.rewriteBv2Int(it) }.toMutableList()
 
         reassertExpressions()
-        val timeLeft = timeLeft(start, timeout)
-        return if (timeLeft.isPositive()) {
-            innerCheck(timeLeft)
-        } else {
-            KSolverStatus.UNKNOWN
-        }
+        return innerCheck(timeLeft(start, timeout))
     }
 
     private fun lazyCheck(timeout: Duration): KSolverStatus {
