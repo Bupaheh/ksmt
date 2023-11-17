@@ -28,7 +28,12 @@ publishing {
     }
 }
 
-tasks.register<JavaExec>("benchmark"){
+tasks.register<JavaExec>("benchmark") {
     mainClass.set("io.ksmt.solver.wrapper.bv2int.BenchamarksKt")
+    classpath = sourceSets["test"].runtimeClasspath
+}
+
+tasks.register<JavaExec>("benchmarkGeneration") {
+    mainClass.set("io.ksmt.solver.wrapper.bv2int.BenchmarkGenerationKt")
     classpath = sourceSets["test"].runtimeClasspath
 }

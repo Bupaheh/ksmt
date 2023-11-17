@@ -67,6 +67,21 @@ fun Project.downloadPreparedSmtLibBenchmarkTestData(downloadPath: File, testData
         }
     }
 
+fun Project.downloadPreparedBv2IntBenchmarkTestData(downloadPath: File, testDataPath: File, version: String) =
+    tasks.register("downloadPreparedBv2IntBenchmarkTestData") {
+        doLast {
+            val benchmarksUrl = "https://github.com/Bupaheh/ksmt/releases/download/$version/bv2int-benchmarks.zip"
+
+            download(benchmarksUrl, downloadPath)
+
+            copy {
+                from(zipTree(downloadPath))
+                into(testDataPath)
+                duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+            }
+        }
+    }
+
 private fun Project.testResourceDir(): File? {
     val sourceSets = (this as ExtensionAware).extensions.getByName("sourceSets") as SourceSetContainer
     return sourceSets["test"]?.output?.resourcesDir
