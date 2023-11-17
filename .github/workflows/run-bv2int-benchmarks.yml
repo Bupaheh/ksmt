@@ -1,4 +1,4 @@
-name: Build and run long ksmt tests
+name: Benchmark bv2int
 
 on:
   workflow_dispatch:
