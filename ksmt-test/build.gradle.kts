@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":ksmt-yices"))
     implementation(project(":ksmt-runner"))
     implementation(project(":ksmt-symfpu"))
+    implementation(project(":ksmt-bv2int"))
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     implementation(kotlin("reflect"))
@@ -25,7 +26,7 @@ dependencies {
     jmh("org.openjdk.jmh:jmh-generator-annprocess:1.36")
 }
 
-val runBenchmarksBasedTests = project.booleanProperty("runBenchmarksBasedTests") ?: false
+val runBenchmarksBasedTests = project.booleanProperty("runBenchmarksBasedTests") ?: true
 
 // Split all benchmarks test data on a several [benchmarkChunkMaxSize] sized chunks
 val benchmarkChunkMaxSize = project.intProperty("benchmarkChunkSize") ?: Int.MAX_VALUE
@@ -138,3 +139,9 @@ task<TestReport>("mergeTestReports") {
 jmh {
     stringProperty("jmhIncludes")?.let { includes.add(it) }
 }
+
+downloadPreparedBv2IntBenchmarkTestData(
+    downloadPath = downloadedTestData,
+    testDataPath = unpackedTestDataDir,
+    version = "0.0.0"
+)

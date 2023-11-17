@@ -4,6 +4,7 @@ import io.ksmt.KContext
 import io.ksmt.solver.KSolver
 import io.ksmt.solver.bitwuzla.KBitwuzlaSolver
 import io.ksmt.solver.cvc5.KCvc5Solver
+import io.ksmt.solver.cvc5.KCvc5SolverUniversalConfiguration
 import io.ksmt.solver.runner.KSolverRunnerManager
 import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.yices.KYicesSolverUniversalConfiguration

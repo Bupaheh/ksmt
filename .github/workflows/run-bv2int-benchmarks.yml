@@ -1,0 +1,175 @@
+name: Build and run long ksmt tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      chunkSize:
+        description: Maximal size of a single test data chunk
+        required: true
+        type: number
+        default: 10000
+      testDataSize:
+        description: Size of test dataset
+        required: true
+        type: number
+        default: 170000
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix-chunks: ${{ steps.set-chunks.outputs.chunks }}
+    steps:
+      - id: set-chunks
+        name: Calculate chunk indices based on size of the dataset
+        run: |
+          LIMIT="${{ inputs.testDataSize }}"
+          SIZE="${{ inputs.chunkSize }}"
+          CHUNKS_AMOUNT=$((LIMIT / SIZE - 1))
+          CHUNKS="[0"
+          for (( i=1; i<=$CHUNKS_AMOUNT; i+=1 )); do
+            CHUNKS+=",$i";
+          done
+          CHUNKS+="]"
+          echo "chunks=$CHUNKS" >> $GITHUB_OUTPUT
+
+  prepare_test_data:
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare test data (cache)
+        id: test-data-cache
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-test-data
+        with:
+          key: test-data-${{ matrix.os }}
+          path: ksmt-test/testData/testData.zip
+
+      - name: Set up JDK 1.8
+        if: steps.test-data-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v3
+        with:
+          java-version: 8
+          distribution: 'zulu'
+          cache: gradle
+
+      - name: Prepare test data (download)
+        if: steps.test-data-cache.outputs.cache-hit != 'true'
+        uses: gradle/gradle-build-action@v2
+        with:
+          arguments: |
+            :ksmt-test:downloadPreparedBv2IntBenchmarkTestData
+            --no-daemon
+
+  run_tests:
+    needs: [setup, prepare_test_data]
+    continue-on-error: true
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        chunk: ${{ fromJSON(needs.setup.outputs.matrix-chunks) }}
+
+    name: Run [${{ matrix.chunk }}] on ${{ matrix.os }}
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare test data (cache)
+        id: test-data-cache
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-test-data
+        with:
+          key: test-data-${{ matrix.os }}
+          path: ksmt-test/testData/testData.zip
+
+      - name: Check test data downloaded
+        if: steps.test-data-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Test data is not available"
+          exit 1
+
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v3
+        with:
+          java-version: 8
+          distribution: 'zulu'
+          cache: gradle
+
+      # Since ksmt-test/testData/testData.zip exists task will not download it again
+      - name: Prepare test data (unpack)
+        uses: gradle/gradle-build-action@v2
+        with:
+          arguments: |
+            :ksmt-test:downloadPreparedBv2IntBenchmarkTestData
+            --no-daemon
+
+      # We don't want to run basic KSMT tests on each chunk
+      - name: Build project
+        uses: gradle/gradle-build-action@v2
+        if: ${{ matrix.chunk == '0' }}
+        with:
+          arguments: |
+            build
+            --no-daemon
+
+      - name: Run Bv2IntBenchmark
+        uses: gradle/gradle-build-action@v2
+        with:
+          arguments: |
+            :ksmt-test:test --tests "io.ksmt.test.benchmarks.Bv2IntBenchmark.benchmark"
+            --no-daemon
+            --continue
+            -PrunBenchmarksBasedTests=true
+            -PbenchmarkChunkSize=${{ inputs.chunkSize }}
+            -PbenchmarkChunk=${{ matrix.chunk }}
+
+      # - name: Upload ksmt test reports
+      #   uses: actions/upload-artifact@v3
+      #   if: always()
+      #   with:
+      #     name: ${{ format('ksmt-test-report-{0}-{1}-{2}', matrix.os, matrix.test, matrix.chunk) }}
+      #     path: ksmt-test/build/test-results/test/binary
+
+  # merge_test_report:
+  #   name: Merge chunked test reports into a single one
+
+  #   needs: [ run_tests ]
+  #   runs-on: ubuntu-latest
+  #   if: ${{ always() }}
+
+  #   steps:
+  #     - uses: actions/checkout@v3
+
+  #     - uses: actions/download-artifact@v3
+  #       with:
+  #         path: reports
+
+  #     - name: Set up JDK 1.8
+  #       uses: actions/setup-java@v3
+  #       with:
+  #         java-version: 8
+  #         distribution: 'zulu'
+
+  #     - name: Merge test report [ubuntu-latest]
+  #       uses: gradle/gradle-build-action@v2
+  #       with:
+  #         arguments: |
+  #           :ksmt-test:mergeTestReports
+  #           --no-daemon
+  #           -PtestReportMergePrefix=ksmt-test-report-ubuntu-latest
+            
+  #     - name: Upload merged test reports
+  #       uses: actions/upload-artifact@v3
+  #       with:
+  #         name: ksmt-test-report
+  #         path: ksmt-test-report-*

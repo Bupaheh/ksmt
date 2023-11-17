@@ -5,6 +5,7 @@ import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
 import io.ksmt.KContext
 import io.ksmt.expr.KExpr
+import io.ksmt.expr.KInterpretedValue
 import io.ksmt.runner.serializer.AstSerializationCtx
 import io.ksmt.solver.KSolverStatus
 import io.ksmt.solver.yices.KYicesSolver
@@ -75,7 +76,7 @@ private inline fun readSmtBenchmarkData(
     dirPath: String,
     begin: Int = 0,
     end: Int = 5000,
-    filterExpr: (String, KExpr<KBoolSort>) -> Boolean
+    filterExpr: (String) -> Boolean
 ): List<KExpr<KBoolSort>> {
     val parser = KZ3SMTLibParser(ctx)
     val expressions = mutableListOf<KExpr<KBoolSort>>()
@@ -85,11 +86,24 @@ private inline fun readSmtBenchmarkData(
         .shuffled(Random(1))
         .mapIndexed { index, path -> index to path }
         .filter { (idx, _) -> idx in begin..end && idx != 44839 && idx != 1351 }
+        .filter { filterExpr(it.second.path) }
 
     paths.forEach { (idx, file) ->
         println("$idx\t${expressions.size}")
 
         val expr = ctx.mkAnd(parser.parse(file.toPath()))
+
+        val fileName = file.toPath().toString()
+            .substringAfterLast("Projects/QF_BV/")
+            .replace('/', '_')
+
+        if (TempVisitor(ctx).visit(expr) && expr !is KInterpretedValue) {
+            try {
+                file.copyTo(File("generatedExpressions/QF_BV_UNBIT/$fileName"))
+            } catch (_: Exception) { }
+        }
+
+        return@forEach
 
 //        val decls = KDeclCounter(ctx).countDeclarations(expr)
 //        val liaCnt = countOperations(decls, liaDecls)
@@ -105,7 +119,7 @@ private inline fun readSmtBenchmarkData(
 //                && liaCnt * 0.5 > weirdCnt
 //                && liaCnt * 0.5 > shiftCnt
 
-        if (filterExpr(file.path, expr)) {
+        if (filterExpr(file.path)) {
             expressions.add(expr)
         }
     }
@@ -116,17 +130,30 @@ private inline fun readSmtBenchmarkData(
 
 
 fun main() = with(KContext()) {
-    val ids = 0..11
-    val exprs = mutableListOf<KExpr<KBoolSort>>()
-    val ctx = KContext()
-    for (i in ids) {
-        println(i)
-        val ex = ctx.readFormulas(File("generatedExpressions/QF_BV/QF_BV$i"))
-        exprs.addAll(ex)
-    }
-
-    writeExpressions(ctx, exprs, "generatedExpressions/QF_BV0")
-    return
+//    val ids = 0 ..7
+//    val exprs = mutableListOf<KExpr<KBoolSort>>()
+//    val ctx = KContext()
+//    for (i in ids) {
+//        println(i)
+//        val ex = ctx.readFormulas(File("ksmt-bv2int/generatedExpressions/QF_BV/QF_BV_UNBIT$i"))
+//            .filter { TempVisitor(ctx).visit(it) }
+//        exprs.addAll(ex)
+//    }
+//
+//    /*
+//    0 - 15: 647
+//    16 - 25: 409
+//    26 - 37: 496
+//    38 - 48: 428
+//    49 - 61: 537
+//    62 - 68: 257
+//    69 - 80: 459
+//    81 - 92: 425
+//     */
+//
+//    println(exprs.size)
+//    writeExpressions(ctx, exprs, "ksmt-bv2int/generatedExpressions/QF_BV_UNBIT")
+//    return
 
 
 //    val ctx = KContext()
@@ -169,28 +196,28 @@ fun main() = with(KContext()) {
 //    writeExpressions(ctx, expressions, "generatedExpressions/QF_BV_bslia2")
 
 
-    val smtExprs = File("/home/pvl/Heh/Projects/ksmt/generatedExpressions/QF_BV/SMTcomp2022Exprs.txt")
+    val smtExprs = File("generatedExpressions/QF_BV/SMTcomp2022Exprs.txt")
         .readLines()
         .map { path ->
             path.removePrefix("/non-incremental/")
         }.toSet()
 
-    for (i in 24..92) {
+    for (i in 61..93) {
         val ctx = KContext()
         val step = 500
         val exprs = readSmtBenchmarkData(
             ctx,
             "/home/pvl/Heh/Projects/QF_BV",
             begin = step * i,
-            end = step * (i + 1),
-            filterExpr = { path, _ ->
+            end = step * (i + 1) - 1,
+            filterExpr = { path ->
                 val normalizedPath = path.removePrefix("/home/pvl/Heh/Projects/")
 
                 normalizedPath in smtExprs
             }
         )
 
-        writeExpressions(ctx, exprs, "generatedExpressions/QF_BV/QF_BV$i")
+//        writeExpressions(ctx, exprs, "generatedExpressions/QF_BV/QF_BV$i")
     }
 
 //    val params = GenerationParameters(
