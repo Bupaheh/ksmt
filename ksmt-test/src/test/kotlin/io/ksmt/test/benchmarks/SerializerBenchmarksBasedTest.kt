@@ -87,7 +87,8 @@ class SerializerBenchmarksBasedTest : BenchmarksBasedTest() {
     }
 
     companion object {
+
         @JvmStatic
-        fun serializerTestData() = testData { !it.startsWith("bv2int-") }
+        fun serializerTestData() = testData()
     }
 }

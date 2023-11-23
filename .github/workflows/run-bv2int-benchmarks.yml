@@ -1,7 +1,6 @@
 name: Run bv2int benchmarks
 
 on:
-  push:
   workflow_dispatch:
     inputs:
       chunkSize:
@@ -131,6 +130,7 @@ jobs:
         with:
           arguments: |
             :ksmt-test:test --tests "io.ksmt.test.benchmarks.Bv2IntBenchmark.benchmark"
+            -i
             --no-daemon
             --continue
             -PrunBenchmarksBasedTests=true
