@@ -106,11 +106,15 @@ class KImportantAppCollector private constructor(
         TODO()
     }
 
-    override fun <D0 : KSort, D1 : KSort, R : KSort> transform(expr: KArray2Lambda<D0, D1, R>): KExpr<KArray2Sort<D0, D1, R>> {
+    override fun <D0 : KSort, D1 : KSort, R : KSort> transform(
+        expr: KArray2Lambda<D0, D1, R>
+    ): KExpr<KArray2Sort<D0, D1, R>> {
         TODO()
     }
 
-    override fun <D0 : KSort, D1 : KSort, D2 : KSort, R : KSort> transform(expr: KArray3Lambda<D0, D1, D2, R>): KExpr<KArray3Sort<D0, D1, D2, R>> {
+    override fun <D0 : KSort, D1 : KSort, D2 : KSort, R : KSort> transform(
+        expr: KArray3Lambda<D0, D1, D2, R>
+    ): KExpr<KArray3Sort<D0, D1, D2, R>> {
         TODO()
     }
 

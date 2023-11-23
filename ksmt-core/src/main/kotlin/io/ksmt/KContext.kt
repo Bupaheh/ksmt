@@ -2784,7 +2784,12 @@ open class KContext(
         mkSimplified(arg, shift, KContext::simplifyBvLogicalShiftRightExpr, ::mkBvLogicalShiftRightExprNoSimplify)
 
     open fun <T : KBvSort> mkBvLogicalShiftRightCExpr(arg: KExpr<T>, shift: Int): KExpr<T> =
-        mkSimplified(arg, mkBv(shift, arg.sort.sizeBits).uncheckedCast(), KContext::simplifyBvLogicalShiftRightExpr, ::mkBvLogicalShiftRightExprNoSimplify)
+        mkSimplified(
+            arg,
+            mkBv(shift, arg.sort.sizeBits).uncheckedCast(),
+            KContext::simplifyBvLogicalShiftRightExpr,
+            ::mkBvLogicalShiftRightExprNoSimplify
+        )
 
     /**
      * Create BitVec logical shift right (`bvlshr`) expression.

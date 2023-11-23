@@ -10,10 +10,6 @@ import io.ksmt.utils.mkConst
 import io.ksmt.utils.powerOfTwo
 import io.ksmt.utils.uncheckedCast
 
-enum class Signedness {
-    UNSIGNED,
-    SIGNED,
-}
 
 fun KContext.getBounds(
     sizeBits: UInt,
@@ -29,6 +25,11 @@ fun KContext.getBounds(
     }
 
     return Pair(lowerBound + diff, upperBound + diff)
+}
+
+enum class Signedness {
+    UNSIGNED,
+    SIGNED,
 }
 
 fun KContext.toSignedness(
@@ -92,51 +93,51 @@ fun KContext.signedToUnsigned(value: KExpr<KIntSort>, sizeBits: UInt): KExpr<KIn
         value
     )
 
-fun <T : KBvSort> KContext.evalBv(expr: KExpr<T>): KExpr<T> {
-    val kVal = mkBv(-1, 64u)
-    val sVal = mkBv(2199023255554, 64u)
-    val yVal = mkBv(-4398046511105, 64u)
-
-    val k = bv64Sort.mkConst("kjmfxzw")
-    val s = bv64Sort.mkConst("sldjlemuku")
-    val y = bv64Sort.mkConst("yybilyil")
-
-    val consts = listOf(
-        k to kVal,
-        s to sVal,
-        y to yVal,
-    )
-
-
-    val substituted = KExprSubstitutor(this).apply {
-        consts.forEach { (c, v) ->
-            substitute(c, v.uncheckedCast())
-        }
-    }.apply(expr)
-
-    return KExprSimplifier(this).apply(substituted)
-}
-
-fun KContext.evalInt(expr: KExpr<KIntSort>): KExpr<KIntSort> {
-    val kVal = mkBv(-1, 64u)
-    val sVal = mkBv(2199023255554, 64u)
-    val yVal = mkBv(-4398046511105, 64u)
-
-    val k = bv64Sort.mkConst("kjmfxzw")
-    val s = bv64Sort.mkConst("sldjlemuku")
-    val y = bv64Sort.mkConst("yybilyil")
-
-    val consts = listOf(
-        k to kVal,
-        s to sVal,
-        y to yVal,
-    )
-
-    val substituted = KExprSubstitutor(this).apply {
-        consts.forEach { (c, v) ->
-//            substitute(c, mkBv2IntExpr(v, true))
-        }
-    }.apply(expr)
-
-    return KExprSimplifier(this).apply(substituted)
-}
+//fun <T : KBvSort> KContext.evalBv(expr: KExpr<T>): KExpr<T> {
+//    val kVal = mkBv(-1, 64u)
+//    val sVal = mkBv(2199023255554, 64u)
+//    val yVal = mkBv(-4398046511105, 64u)
+//
+//    val k = bv64Sort.mkConst("kjmfxzw")
+//    val s = bv64Sort.mkConst("sldjlemuku")
+//    val y = bv64Sort.mkConst("yybilyil")
+//
+//    val consts = listOf(
+//        k to kVal,
+//        s to sVal,
+//        y to yVal,
+//    )
+//
+//
+//    val substituted = KExprSubstitutor(this).apply {
+//        consts.forEach { (c, v) ->
+//            substitute(c, v.uncheckedCast())
+//        }
+//    }.apply(expr)
+//
+//    return KExprSimplifier(this).apply(substituted)
+//}
+//
+//fun KContext.evalInt(expr: KExpr<KIntSort>): KExpr<KIntSort> {
+//    val kVal = mkBv(-1, 64u)
+//    val sVal = mkBv(2199023255554, 64u)
+//    val yVal = mkBv(-4398046511105, 64u)
+//
+//    val k = bv64Sort.mkConst("kjmfxzw")
+//    val s = bv64Sort.mkConst("sldjlemuku")
+//    val y = bv64Sort.mkConst("yybilyil")
+//
+//    val consts = listOf(
+//        k to kVal,
+//        s to sVal,
+//        y to yVal,
+//    )
+//
+//    val substituted = KExprSubstitutor(this).apply {
+//        consts.forEach { (c, v) ->
+////            substitute(c, mkBv2IntExpr(v, true))
+//        }
+//    }.apply(expr)
+//
+//    return KExprSimplifier(this).apply(substituted)
+//}
