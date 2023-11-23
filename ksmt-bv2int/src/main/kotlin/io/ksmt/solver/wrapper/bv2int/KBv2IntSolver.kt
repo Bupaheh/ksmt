@@ -32,9 +32,6 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         }
     }
 
-    private var roundCount: Int = 0
-    private var checkTime: Long = 0
-
     private var currentScope: UInt = 0u
     private var lastCheckStatus = KSolverStatus.UNKNOWN
 
@@ -115,7 +112,6 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
             }
         }
 
-        checkTime += time
         return status
     }
 
@@ -146,7 +142,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
         if (isCorrect) return status
 
-        roundCount++
+        if (solver is KBenchmarkSolverWrapper) solver.incRoundCount()
+
         lastUnsatScope = currentScope
         currentOverflowLemmas.clear()
         currentAssertedExprs = originalExpressions.map { expr ->
@@ -185,10 +182,11 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
             if (unsatisfied.isEmpty()) return KSolverStatus.SAT
 
             currentAssertedExprs.addAll(unsatisfied.map { ctx.mkAndNoSimplify(ctx.trueExpr, it) })
-            unsatisfied.forEach { solver.assert(it) }
+            solver.assert(unsatisfied)
 
             left = timeLeft(start, timeout)
-            roundCount++
+
+            if (solver is KBenchmarkSolverWrapper) solver.incRoundCount()
         }
 
         return KSolverStatus.UNKNOWN
@@ -197,7 +195,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     override fun check(timeout: Duration): KSolverStatus = checkWithAssumptions(listOf(), timeout)
 
     override fun checkWithAssumptions(assumptions: List<KExpr<KBoolSort>>, timeout: Duration): KSolverStatus {
-        roundCount = 1
+        if (solver is KBenchmarkSolverWrapper) solver.resetRoundCount()
 
         originalAssumptions = assumptions
         currentAssumptions = assumptions.map { currentRewriter.rewriteBv2Int(it) }.toMutableList()
@@ -210,11 +208,10 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     }
 
     override fun pop(n: UInt) {
-        checkTime = 0
         solver.pop(n)
     }
 
-    override fun reasonOfUnknown(): String = "$checkTime;$roundCount"
+    override fun reasonOfUnknown(): String = solver.reasonOfUnknown()
 
     override fun model(): KModel {
         require(lastCheckStatus == KSolverStatus.SAT) {

@@ -6,6 +6,7 @@ import io.ksmt.solver.KSolver
 import io.ksmt.solver.KSolverConfiguration
 import io.ksmt.solver.KSolverStatus
 import io.ksmt.solver.async.KAsyncSolver
+import io.ksmt.solver.wrapper.bv2int.KBenchmarkSolverWrapper
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter
 import io.ksmt.solver.wrapper.bv2int.KBv2IntSolver
 import io.ksmt.solver.yices.KYicesSolver
@@ -32,7 +33,7 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
         ctx: KContext
     ) : KBv2IntSolver<KYicesSolverConfiguration>(
         ctx,
-        KYicesSolver(ctx),
+        KBenchmarkSolverWrapper(KYicesSolver(ctx)),
         KBv2IntRewriter.RewriteMode.LAZY,
         KBv2IntRewriter.AndRewriteMode.SUM,
         KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW

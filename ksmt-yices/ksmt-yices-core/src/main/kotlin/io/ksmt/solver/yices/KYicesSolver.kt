@@ -16,7 +16,6 @@ import io.ksmt.solver.model.KNativeSolverModel
 import io.ksmt.sort.KBoolSort
 import java.util.Timer
 import java.util.TimerTask
-import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 
 class KYicesSolver(private val ctx: KContext) : KSolver<KYicesSolverConfiguration> {
@@ -45,8 +44,6 @@ class KYicesSolver(private val ctx: KContext) : KSolver<KYicesSolverConfiguratio
     private val trackedAssertions = mutableListOf(currentLevelTrackedAssertions)
 
     private val timer = Timer()
-
-    private var checkTime: Long = 0
 
     override fun configure(configurator: KYicesSolverConfiguration.() -> Unit) {
         require(config.isActive) {
@@ -112,13 +109,7 @@ class KYicesSolver(private val ctx: KContext) : KSolver<KYicesSolverConfiguratio
         }
 
         checkWithTimer(timeout) {
-            val status: Status
-
-            val time = measureNanoTime {
-                status = nativeContext.check()
-            }
-            checkTime += time
-            status
+            nativeContext.check()
         }.processCheckResult()
     }
 
@@ -143,13 +134,7 @@ class KYicesSolver(private val ctx: KContext) : KSolver<KYicesSolverConfiguratio
         }
 
         checkWithTimer(timeout) {
-            val status: Status
-
-            val time = measureNanoTime {
-                status = nativeContext.checkWithAssumptions(yicesAssumptions.assumedTerms())
-            }
-            checkTime += time
-            status
+            nativeContext.checkWithAssumptions(yicesAssumptions.assumedTerms())
         }.processCheckResult()
     }
 
@@ -174,12 +159,12 @@ class KYicesSolver(private val ctx: KContext) : KSolver<KYicesSolverConfiguratio
     }
 
     override fun reasonOfUnknown(): String {
-//        require(lastCheckStatus == KSolverStatus.UNKNOWN) {
-//            "Unknown reason is only available after UNKNOWN checks"
-//        }
+        require(lastCheckStatus == KSolverStatus.UNKNOWN) {
+            "Unknown reason is only available after UNKNOWN checks"
+        }
 
         // There is no way to retrieve reason of unknown from Yices in general case.
-        return "$checkTime;1"
+        return lastReasonOfUnknown ?: "unknown"
     }
 
     override fun interrupt() = yicesTry {
