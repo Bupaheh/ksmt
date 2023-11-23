@@ -204,9 +204,9 @@ open class KZ3Solver(private val ctx: KContext) : KSolver<KZ3SolverConfiguration
     }
 
     override fun reasonOfUnknown(): String = z3Try {
-//        require(lastCheckStatus == KSolverStatus.UNKNOWN) { "Unknown reason is only available after UNKNOWN checks" }
-//        lastReasonOfUnknown ?: solver.reasonUnknown
-        "$checkTime;1"
+        require(lastCheckStatus == KSolverStatus.UNKNOWN) { "Unknown reason is only available after UNKNOWN checks" }
+        lastReasonOfUnknown ?: solver.reasonUnknown
+//        "$checkTime;1"
     }
 
     override fun interrupt() = z3Try {
