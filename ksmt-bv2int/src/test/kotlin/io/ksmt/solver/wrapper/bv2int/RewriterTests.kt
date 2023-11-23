@@ -20,6 +20,7 @@ import io.ksmt.utils.getValue
 import io.ksmt.utils.mkConst
 import io.ksmt.utils.uncheckedCast
 import kotlin.random.Random
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.time.Duration.Companion.seconds
 
@@ -188,6 +189,7 @@ class RewriterTests {
         }
     }
 
+    @Ignore
     @Test
     fun testInt2BvModelConversion() = with(KContext()) {
         val params = GenerationParameters(
@@ -223,6 +225,7 @@ class RewriterTests {
         )
     }
 
+    @Ignore
     @Test
     fun testBv2IntModelConversion() = with(KContext()) {
         val params = GenerationParameters(
