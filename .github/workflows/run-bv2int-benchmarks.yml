@@ -120,7 +120,7 @@ jobs:
       # We don't want to run basic KSMT tests on each chunk
       - name: Build project
         uses: gradle/gradle-build-action@v2
-        if: ${{ matrix.chunk == '0' }}
+        if: ${{ matrix.chunk == '-1' }}
         with:
           arguments: |
             build
