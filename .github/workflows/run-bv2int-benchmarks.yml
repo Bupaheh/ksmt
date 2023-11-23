@@ -1,6 +1,7 @@
-name: Benchmark bv2int
+name: Run bv2int benchmarks
 
 on:
+  push:
   workflow_dispatch:
     inputs:
       chunkSize:
