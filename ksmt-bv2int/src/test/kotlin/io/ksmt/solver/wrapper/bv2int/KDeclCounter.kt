@@ -9,6 +9,7 @@ import io.ksmt.expr.KInterpretedValue
 import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.sort.KSort
 
+@Suppress("ComplexCondition")
 class KDeclCounter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
     private val declCount: HashMap<String, Int> = hashMapOf()
     private val visited = hashSetOf<KExpr<*>>()

@@ -119,6 +119,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         return status
     }
 
+    @Suppress("ComplexCondition")
     private fun signedCheck(timeout: Duration): KSolverStatus {
         val start = Date()
         val status = innerCheck(timeout)
