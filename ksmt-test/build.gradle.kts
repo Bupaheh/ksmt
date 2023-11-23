@@ -26,7 +26,7 @@ dependencies {
     jmh("org.openjdk.jmh:jmh-generator-annprocess:1.36")
 }
 
-val runBenchmarksBasedTests = project.booleanProperty("runBenchmarksBasedTests") ?: true
+val runBenchmarksBasedTests = project.booleanProperty("runBenchmarksBasedTests") ?: false
 
 // Split all benchmarks test data on a several [benchmarkChunkMaxSize] sized chunks
 val benchmarkChunkMaxSize = project.intProperty("benchmarkChunkSize") ?: Int.MAX_VALUE
