@@ -169,6 +169,7 @@ jobs:
         with:
           arguments: |
             :ksmt-test:mergeBv2IntBenchmarkReports
+            -i
             --no-daemon
             -PtestReportMergePrefix=bv2int-benchmark-report
             

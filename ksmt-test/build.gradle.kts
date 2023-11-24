@@ -145,7 +145,12 @@ tasks.register("mergeBv2intBenchmarkReports") {
         val destinationFile = rootDir.resolve(mergePrefix)
 
         reports?.forEach {
-            destinationFile.appendText(it.readText())
+            it.walkTopDown().forEach { report ->
+                println(report.path)
+                if (report.extension == "csv") {
+                    destinationFile.appendText(report.readText())
+                }
+            }
         }
     }
 }
