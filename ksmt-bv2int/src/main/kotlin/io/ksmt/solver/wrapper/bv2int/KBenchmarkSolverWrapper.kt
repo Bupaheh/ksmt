@@ -12,7 +12,7 @@ class KBenchmarkSolverWrapper<Config: KSolverConfiguration>(
     private val solver: KSolver<Config>,
 ) : KSolver<Config> by solver {
     private var checkTime: Long = 0
-    private var roundCount: Int = 0
+    private var roundCount: Int = 1
 
     fun resetRoundCount() {
         roundCount = 1

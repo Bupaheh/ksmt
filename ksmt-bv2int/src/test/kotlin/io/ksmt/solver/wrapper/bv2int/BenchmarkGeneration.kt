@@ -16,6 +16,7 @@ import io.ksmt.utils.getValue
 import io.ksmt.utils.mkConst
 import io.ksmt.utils.uncheckedCast
 import java.io.File
+import java.nio.ByteBuffer
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.seconds
 
@@ -29,7 +30,8 @@ private fun writeExpressions(ctx: KContext, expressions: List<KExpr<KBoolSort>>,
         marshaller.write(emptyRdSerializationCtx, buffer, expr)
     }
 
-    File(path).writeBytes(buffer.getArray())
+    val xxx = ByteBuffer.wrap(buffer.getArray(), 0, buffer.position)
+    File(path).writeBytes(xxx.array())
 }
 
 val generalDecls = setOf(
