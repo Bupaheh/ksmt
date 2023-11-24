@@ -137,21 +137,16 @@ task<TestReport>("mergeTestReports") {
 }
 
 tasks.register("mergeBv2intBenchmarkReports") {
-    val mergePrefix = stringProperty("testReportMergePrefix")
+    val mergePrefix = stringProperty("testReportMergePrefix") ?: return@register
 
-    if (mergePrefix != null) {
-        val reports = rootDir.resolve("reports").listFiles { f: File -> f.name.startsWith(mergePrefix) }
+    val reports = rootDir
+        .resolve("reports").listFiles { f: File -> f.name.startsWith(mergePrefix) }
+        ?.flatMap { it.listFiles { f -> f.extension == "csv" }?.toList() ?: emptyList() }
 
-        val destinationFile = rootDir.resolve(mergePrefix)
+    val destinationFile = rootDir.resolve(mergePrefix)
 
-        reports?.forEach {
-            it.walkTopDown().forEach { report ->
-                println(report.path)
-                if (report.extension == "csv") {
-                    destinationFile.appendText(report.readText())
-                }
-            }
-        }
+    reports?.forEach { report ->
+        destinationFile.appendText(report.readText())
     }
 }
 
