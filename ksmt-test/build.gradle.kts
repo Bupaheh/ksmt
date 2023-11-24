@@ -136,6 +136,20 @@ task<TestReport>("mergeTestReports") {
     }
 }
 
+tasks.register("mergeBv2intBenchmarkReports") {
+    val mergePrefix = stringProperty("testReportMergePrefix")
+
+    if (mergePrefix != null) {
+        val reports = rootDir.resolve("reports").listFiles { f: File -> f.name.startsWith(mergePrefix) }
+
+        val destinationFile = rootDir.resolve(mergePrefix)
+
+        reports?.forEach {
+            destinationFile.appendText(it.readText())
+        }
+    }
+}
+
 jmh {
     stringProperty("jmhIncludes")?.let { includes.add(it) }
 }
