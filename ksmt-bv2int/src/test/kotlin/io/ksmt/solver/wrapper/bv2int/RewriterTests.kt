@@ -2,21 +2,14 @@ package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.KContext
 import io.ksmt.decl.KConstDecl
-import io.ksmt.expr.KApp
-import io.ksmt.expr.KBvSignedLessOrEqualExpr
 import io.ksmt.expr.KExpr
-import io.ksmt.expr.KQuantifier
 import io.ksmt.expr.rewrite.KExprUninterpretedDeclCollector
 import io.ksmt.solver.KSolverStatus
-import io.ksmt.solver.cvc5.KCvc5Solver
 import io.ksmt.solver.runner.KSolverRunnerManager
-import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.sort.KBoolSort
-import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KSort
 import io.ksmt.test.GenerationParameters
-import io.ksmt.utils.getValue
 import io.ksmt.utils.mkConst
 import io.ksmt.utils.uncheckedCast
 import kotlin.random.Random

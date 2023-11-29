@@ -1,25 +1,29 @@
-package io.ksmt.solver.wrapper.bv2int
+package io.ksmt.test.benchmarks.bv2int
 
+import io.ksmt.KContext
 import io.ksmt.expr.KExpr
 import io.ksmt.solver.KSolver
 import io.ksmt.solver.KSolverConfiguration
 import io.ksmt.solver.KSolverStatus
+import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.sort.KBoolSort
+import io.ksmt.utils.mkConst
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 
-class KBenchmarkSolverWrapper<Config: KSolverConfiguration>(
+open class KBenchmarkSolverWrapper<Config: KSolverConfiguration>(
+    ctx: KContext,
     private val solver: KSolver<Config>,
 ) : KSolver<Config> by solver {
     private var checkTime: Long = 0
-    private var roundCount: Int = 1
 
-    fun resetRoundCount() {
-        roundCount = 1
-    }
-
-    fun incRoundCount() {
-        roundCount++
+    init {
+        if (solver is KZ3Solver) {
+            solver.push()
+            solver.assert(ctx.boolSort.mkConst("a"))
+            solver.check()
+            solver.pop()
+        }
     }
 
     override fun check(timeout: Duration): KSolverStatus {
@@ -46,5 +50,5 @@ class KBenchmarkSolverWrapper<Config: KSolverConfiguration>(
         return status
     }
 
-    override fun reasonOfUnknown(): String = "$checkTime;$roundCount"
+    override fun reasonOfUnknown(): String = "$checkTime;1"
 }
