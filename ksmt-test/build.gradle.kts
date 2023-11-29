@@ -39,6 +39,8 @@ val usePreparedBenchmarks = project.booleanProperty("usePreparedBenchmarks") ?: 
 // skip big benchmarks to achieve faster tests build and run time
 val skipBigBenchmarks = project.booleanProperty("skipBigBenchmarks") ?: true
 
+val bv2intSolvers = project.stringProperty("bv2intSolvers") ?: ""
+
 val smtLibBenchmarks = listOfNotNull(
     "QF_ALIA", // 12M
     "QF_AUFLIA", // 1.5M
@@ -110,6 +112,7 @@ val downloadPreparedBenchmarksTestData = downloadPreparedSmtLibBenchmarkTestData
 tasks.withType<Test> {
     if (runBenchmarksBasedTests) {
         dependsOn.add(prepareTestData)
+        println("what is going on: $bv2intSolvers")
         environment("benchmarkChunkMaxSize", benchmarkChunkMaxSize)
         environment("benchmarkChunk", benchmarkChunk)
         environment("bv2intSolvers", bv2intSolvers)
@@ -160,5 +163,3 @@ downloadPreparedBv2IntBenchmarkTestData(
     testDataPath = unpackedTestDataDir,
     version = "0.0.0"
 )
-
-val bv2intSolvers = stringProperty("bv2intSolvers") ?: ""
