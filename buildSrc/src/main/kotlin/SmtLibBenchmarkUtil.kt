@@ -4,6 +4,7 @@ import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.kotlin.dsl.get
 import java.io.File
+import org.gradle.api.Task
 
 fun Project.mkSmtLibBenchmarkTestData(name: String) = tasks.register("smtLibBenchmark-$name") {
     doLast {
@@ -52,35 +53,40 @@ fun Project.usePreparedSmtLibBenchmarkTestData(path: File) = tasks.register("smt
     }
 }
 
-fun Project.downloadPreparedSmtLibBenchmarkTestData(downloadPath: File, testDataPath: File, version: String) =
-    tasks.register("downloadPreparedSmtLibBenchmarkTestData") {
-        doLast {
-            val benchmarksUrl = "https://github.com/UnitTestBot/ksmt/releases/download/$version/benchmarks.zip"
+fun Project.downloadPreparedBenchmarkTestDataTask(
+    taskName: String,
+    downloadPath: File,
+    testDataPath: File,
+    url: String
+) = tasks.register(taskName) {
+    doLast {
+        val benchmarksUrl = url
 
-            download(benchmarksUrl, downloadPath)
+        download(benchmarksUrl, downloadPath)
 
-            copy {
-                from(zipTree(downloadPath))
-                into(testDataPath)
-                duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-            }
+        copy {
+            from(zipTree(downloadPath))
+            into(testDataPath)
+            duplicatesStrategy = DuplicatesStrategy.EXCLUDE
         }
     }
+}
+
+fun Project.downloadPreparedSmtLibBenchmarkTestData(downloadPath: File, testDataPath: File, version: String) =
+    downloadPreparedBenchmarkTestDataTask(
+        taskName = "downloadPreparedSmtLibBenchmarkTestData",
+        downloadPath = downloadPath,
+        testDataPath = testDataPath,
+        url = "https://github.com/UnitTestBot/ksmt/releases/download/$version/benchmarks.zip"
+    )
 
 fun Project.downloadPreparedBv2IntBenchmarkTestData(downloadPath: File, testDataPath: File, version: String) =
-    tasks.register("downloadPreparedBv2IntBenchmarkTestData") {
-        doLast {
-            val benchmarksUrl = "https://github.com/Bupaheh/ksmt/releases/download/$version/bv2int-benchmarks.zip"
-
-            download(benchmarksUrl, downloadPath)
-
-            copy {
-                from(zipTree(downloadPath))
-                into(testDataPath)
-                duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-            }
-        }
-    }
+    downloadPreparedBenchmarkTestDataTask(
+        taskName = "downloadPreparedBv2IntBenchmarkTestData",
+        downloadPath = downloadPath,
+        testDataPath = testDataPath,
+        url = "https://github.com/Bupaheh/ksmt/releases/download/$version/bv2int-benchmarks.zip"
+    )
 
 private fun Project.testResourceDir(): File? {
     val sourceSets = (this as ExtensionAware).extensions.getByName("sourceSets") as SourceSetContainer

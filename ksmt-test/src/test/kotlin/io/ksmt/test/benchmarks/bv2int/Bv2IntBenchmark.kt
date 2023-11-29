@@ -36,7 +36,10 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
         KCvc5LazySumSignedLazyOverflow::class to "Cvc5-Lazy-Sum-SignedLazyOverflow",
         KYicesLazySumSigned::class to "Yices-Lazy-Sum-Signed",
         KZ3LazySumSigned::class to "Z3-Lazy-Sum-Signed",
-        KCvc5LazySumSigned::class to "Cvc5-Lazy-Sum-Signed"
+        KCvc5LazySumSigned::class to "Cvc5-Lazy-Sum-Signed",
+        KYicesLazySumUnsigned::class to "Yices-Lazy-Sum-Unsigned",
+        KZ3LazySumUnsigned::class to "Z3-Lazy-Sum-Unsigned",
+        KCvc5LazySumUnsigned::class to "Cvc5-Lazy-Sum-Unsigned",
     ).uncheckedCast()
 
     @ParameterizedTest(name = "{0}")
@@ -76,11 +79,9 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
                     val resultRow =
                         "$name,$repeatIdx,$configName,${res.status},${res.checkTime},${res.assertTime},${res.roundCnt}"
 
-                    println(resultRow)
+                    if (res.roundCnt == -2) return@repeat
 
                     outputFile.appendText("$resultRow\n")
-
-                    if (res.roundCnt == -2) return@repeat
 
                     if (res.status == KSolverStatus.UNKNOWN) return@repeat
                 }
