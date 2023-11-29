@@ -28,18 +28,18 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
     private val repeatNum = 3
 
     private val solvers: List<Pair<KClass<KSolver<KSolverConfiguration>>, String>> = listOf(
-        KYicesSolverBench::class to "Yices",
-        KZ3SolverBench::class to "Z3",
-//        KCvc5SolverBench::class to "Cvc5",
-        KYicesLazySumSignedLazyOverflow::class to "Yices-Lazy-Sum-SignedLazyOverflow",
-        KZ3LazySumSignedLazyOverflow::class to "Z3-Lazy-Sum-SignedLazyOverflow",
-//        KCvc5LazySumSignedLazyOverflow::class to "Cvc5-Lazy-Sum-SignedLazyOverflow",
-        KYicesLazySumSigned::class to "Yices-Lazy-Sum-Signed",
-        KZ3LazySumSigned::class to "Z3-Lazy-Sum-Signed",
-//        KCvc5LazySumSigned::class to "Cvc5-Lazy-Sum-Signed",
-        KYicesLazySumUnsigned::class to "Yices-Lazy-Sum-Unsigned",
-        KZ3LazySumUnsigned::class to "Z3-Lazy-Sum-Unsigned",
-//        KCvc5LazySumUnsigned::class to "Cvc5-Lazy-Sum-Unsigned",
+//        KYicesSolverBench::class to "Yices",
+//        KZ3SolverBench::class to "Z3",
+        KCvc5SolverBench::class to "Cvc5",
+//        KYicesLazySumSignedLazyOverflow::class to "Yices-Lazy-Sum-SignedLazyOverflow",
+//        KZ3LazySumSignedLazyOverflow::class to "Z3-Lazy-Sum-SignedLazyOverflow",
+        KCvc5LazySumSignedLazyOverflow::class to "Cvc5-Lazy-Sum-SignedLazyOverflow",
+//        KYicesLazySumSigned::class to "Yices-Lazy-Sum-Signed",
+//        KZ3LazySumSigned::class to "Z3-Lazy-Sum-Signed",
+        KCvc5LazySumSigned::class to "Cvc5-Lazy-Sum-Signed",
+//        KYicesLazySumUnsigned::class to "Yices-Lazy-Sum-Unsigned",
+//        KZ3LazySumUnsigned::class to "Z3-Lazy-Sum-Unsigned",
+        KCvc5LazySumUnsigned::class to "Cvc5-Lazy-Sum-Unsigned",
     ).uncheckedCast()
 
     @ParameterizedTest(name = "{0}")
@@ -82,9 +82,9 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
                     println(resultRow)
                     outputFile.appendText("$resultRow\n")
 
-                    if (res.roundCnt == -2) return@repeat
+                    if (res.roundCnt == -2) return@skipBadTestCases
 
-                    if (res.status == KSolverStatus.UNKNOWN) return@repeat
+                    if (res.status == KSolverStatus.UNKNOWN) return@skipBadTestCases
                 }
             }
         }
