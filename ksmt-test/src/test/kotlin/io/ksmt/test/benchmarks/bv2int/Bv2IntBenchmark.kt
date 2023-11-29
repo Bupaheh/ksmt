@@ -24,21 +24,21 @@ import kotlin.time.Duration.Companion.seconds
 class Bv2IntBenchmark : BenchmarksBasedTest() {
     private val outputPath = "report.csv"
     private val outputFile = File(outputPath)
-    private val checkTimeout =  3.seconds
+    private val checkTimeout =  24.seconds
     private val repeatNum = 3
 
     private val solvers: List<Pair<KClass<KSolver<KSolverConfiguration>>, String>> = listOf(
-//        KYicesSolverBench::class to "Yices",
-//        KZ3SolverBench::class to "Z3",
+        KYicesSolverBench::class to "Yices",
+        KZ3SolverBench::class to "Z3",
         KCvc5SolverBench::class to "Cvc5",
-//        KYicesLazySumSignedLazyOverflow::class to "Yices-Lazy-Sum-SignedLazyOverflow",
-//        KZ3LazySumSignedLazyOverflow::class to "Z3-Lazy-Sum-SignedLazyOverflow",
+        KYicesLazySumSignedLazyOverflow::class to "Yices-Lazy-Sum-SignedLazyOverflow",
+        KZ3LazySumSignedLazyOverflow::class to "Z3-Lazy-Sum-SignedLazyOverflow",
         KCvc5LazySumSignedLazyOverflow::class to "Cvc5-Lazy-Sum-SignedLazyOverflow",
-//        KYicesLazySumSigned::class to "Yices-Lazy-Sum-Signed",
-//        KZ3LazySumSigned::class to "Z3-Lazy-Sum-Signed",
+        KYicesLazySumSigned::class to "Yices-Lazy-Sum-Signed",
+        KZ3LazySumSigned::class to "Z3-Lazy-Sum-Signed",
         KCvc5LazySumSigned::class to "Cvc5-Lazy-Sum-Signed",
-//        KYicesLazySumUnsigned::class to "Yices-Lazy-Sum-Unsigned",
-//        KZ3LazySumUnsigned::class to "Z3-Lazy-Sum-Unsigned",
+        KYicesLazySumUnsigned::class to "Yices-Lazy-Sum-Unsigned",
+        KZ3LazySumUnsigned::class to "Z3-Lazy-Sum-Unsigned",
         KCvc5LazySumUnsigned::class to "Cvc5-Lazy-Sum-Unsigned",
     ).uncheckedCast()
 
@@ -76,8 +76,10 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
                         measureAssertTime(ksmtAssertion, solver, checkTimeout)
                     }
 
+                    val status = if (res.roundCnt == -2) res.message else res.status
+
                     val resultRow =
-                        "$name,$repeatIdx,$configName,${res.status},${res.checkTime},${res.assertTime},${res.roundCnt}"
+                        "$name,$repeatIdx,$configName,$status,${res.checkTime},${res.assertTime},${res.roundCnt}"
 
                     println(resultRow)
                     outputFile.appendText("$resultRow\n")
@@ -112,12 +114,13 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
                 solver.assert(expr)
                 status = solver.check(timeout)
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
             return MeasureTimeResult(
                 timeout.inWholeNanoseconds,
                 timeout.inWholeNanoseconds,
                 KSolverStatus.UNKNOWN,
-                -2
+                -2,
+                e.message
             )
         }
 
@@ -131,7 +134,8 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
         val checkTime: Long,
         val assertTime: Long,
         val status: KSolverStatus,
-        val roundCnt: Int
+        val roundCnt: Int,
+        val message: String? = null
     )
 
     private fun KSolver<*>.getCheckTime(default: Long): Long {
