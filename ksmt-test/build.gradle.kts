@@ -112,6 +112,7 @@ tasks.withType<Test> {
         dependsOn.add(prepareTestData)
         environment("benchmarkChunkMaxSize", benchmarkChunkMaxSize)
         environment("benchmarkChunk", benchmarkChunk)
+        environment("bv2intSolvers", bv2intSolvers)
     } else {
         exclude("io/ksmt/test/benchmarks/**")
 
@@ -159,3 +160,5 @@ downloadPreparedBv2IntBenchmarkTestData(
     testDataPath = unpackedTestDataDir,
     version = "0.0.0"
 )
+
+val bv2intSolvers = stringProperty("bv2intSolvers") ?: ""
