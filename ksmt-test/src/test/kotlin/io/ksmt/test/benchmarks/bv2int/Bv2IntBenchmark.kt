@@ -30,16 +30,16 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
     private val solvers: List<Pair<KClass<KSolver<KSolverConfiguration>>, String>> = listOf(
         KYicesSolverBench::class to "Yices",
         KZ3SolverBench::class to "Z3",
-        KCvc5SolverBench::class to "Cvc5",
+//        KCvc5SolverBench::class to "Cvc5",
         KYicesLazySumSignedLazyOverflow::class to "Yices-Lazy-Sum-SignedLazyOverflow",
         KZ3LazySumSignedLazyOverflow::class to "Z3-Lazy-Sum-SignedLazyOverflow",
-        KCvc5LazySumSignedLazyOverflow::class to "Cvc5-Lazy-Sum-SignedLazyOverflow",
+//        KCvc5LazySumSignedLazyOverflow::class to "Cvc5-Lazy-Sum-SignedLazyOverflow",
         KYicesLazySumSigned::class to "Yices-Lazy-Sum-Signed",
         KZ3LazySumSigned::class to "Z3-Lazy-Sum-Signed",
-        KCvc5LazySumSigned::class to "Cvc5-Lazy-Sum-Signed",
+//        KCvc5LazySumSigned::class to "Cvc5-Lazy-Sum-Signed",
         KYicesLazySumUnsigned::class to "Yices-Lazy-Sum-Unsigned",
         KZ3LazySumUnsigned::class to "Z3-Lazy-Sum-Unsigned",
-        KCvc5LazySumUnsigned::class to "Cvc5-Lazy-Sum-Unsigned",
+//        KCvc5LazySumUnsigned::class to "Cvc5-Lazy-Sum-Unsigned",
     ).uncheckedCast()
 
     @ParameterizedTest(name = "{0}")
@@ -79,9 +79,10 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
                     val resultRow =
                         "$name,$repeatIdx,$configName,${res.status},${res.checkTime},${res.assertTime},${res.roundCnt}"
 
-                    if (res.roundCnt == -2) return@repeat
-
+                    println(resultRow)
                     outputFile.appendText("$resultRow\n")
+
+                    if (res.roundCnt == -2) return@repeat
 
                     if (res.status == KSolverStatus.UNKNOWN) return@repeat
                 }
