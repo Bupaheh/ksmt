@@ -129,7 +129,7 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           arguments: |
-            :ksmt-test:test --tests "io.ksmt.test.benchmarks.Bv2IntBenchmark.benchmark"
+            :ksmt-test:test --tests "io.ksmt.test.benchmarks.bv2int.Bv2IntBenchmark.benchmark"
             -i
             --no-daemon
             --continue

@@ -54,6 +54,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private var currentAssumptions = mutableListOf<KExpr<KBoolSort>>()
     private var originalAssumptions = listOf<KExpr<KBoolSort>>()
 
+    private var roundCnt = 0
+
     override fun assert(expr: KExpr<KBoolSort>) {
         val rewritten = currentRewriter.rewriteBv2Int(expr)
 
@@ -142,7 +144,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
         if (isCorrect) return status
 
-        if (solver is KBenchmarkSolverWrapper) solver.incRoundCount()
+        roundCnt++
 
         lastUnsatScope = currentScope
         currentOverflowLemmas.clear()
@@ -186,7 +188,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
             left = timeLeft(start, timeout)
 
-            if (solver is KBenchmarkSolverWrapper) solver.incRoundCount()
+            roundCnt++
         }
 
         return KSolverStatus.UNKNOWN
@@ -195,7 +197,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     override fun check(timeout: Duration): KSolverStatus = checkWithAssumptions(listOf(), timeout)
 
     override fun checkWithAssumptions(assumptions: List<KExpr<KBoolSort>>, timeout: Duration): KSolverStatus {
-        if (solver is KBenchmarkSolverWrapper) solver.resetRoundCount()
+        roundCnt = 1
 
         originalAssumptions = assumptions
         currentAssumptions = assumptions.map { currentRewriter.rewriteBv2Int(it) }.toMutableList()
@@ -211,7 +213,11 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         solver.pop(n)
     }
 
-    override fun reasonOfUnknown(): String = solver.reasonOfUnknown()
+    override fun reasonOfUnknown(): String {
+        val innerReason = solver.reasonOfUnknown()
+
+        return innerReason.substringBefore(';') + ";$roundCnt"
+    }
 
     override fun model(): KModel {
         require(lastCheckStatus == KSolverStatus.SAT) {
