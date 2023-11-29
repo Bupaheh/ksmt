@@ -82,7 +82,7 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
                         measureAssertTime(ksmtAssertion, solver, checkTimeout)
                     }
 
-                    val status = if (res.roundCnt == -2) res.message else res.status
+                    val status = if (res.roundCnt == -2) res.message.toString().replace(',', ' ') else res.status
 
                     val resultRow =
                         "$name,$repeatIdx,$configName,$status,${res.checkTime},${res.assertTime},${res.roundCnt}"
