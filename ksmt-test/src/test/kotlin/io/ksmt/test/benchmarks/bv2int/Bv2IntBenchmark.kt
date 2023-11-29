@@ -30,7 +30,7 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
     private val solversToBenchmark = System.getenv("bv2intSolvers")
         .orEmpty()
         .split(',')
-        .map { it.trim() }
+        .map { solverName -> solverName.trim { it.isWhitespace() || it == '"' } }
         .toSet()
 
     private val solvers: List<Pair<KClass<KSolver<KSolverConfiguration>>, String>> = listOf(
