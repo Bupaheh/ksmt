@@ -141,7 +141,7 @@ jobs:
             -PrunBenchmarksBasedTests=true
             -PbenchmarkChunkSize=${{ inputs.chunkSize }}
             -PbenchmarkChunk=${{ matrix.chunk }}
-            -Pbv2intSolvers=${{ inputs.bv2intSolvers }}
+            -Pbv2intSolvers="${{ inputs.bv2intSolvers }}"
 
       - name: Upload bv2int benchmark reports
         uses: actions/upload-artifact@v3
