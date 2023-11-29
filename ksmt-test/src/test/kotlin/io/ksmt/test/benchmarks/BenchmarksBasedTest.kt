@@ -388,7 +388,7 @@ abstract class BenchmarksBasedTest {
         fun initWorkerPools() {
             solverManager = KSolverRunnerManager(
                 workerPoolSize = 4,
-                hardTimeout = SOLVER_SINGLE_OPERATION_TIMEOUT,
+                hardTimeout = 35.seconds,
                 workerProcessIdleTimeout = 10.minutes
             )
             testWorkers = KsmtWorkerPool(

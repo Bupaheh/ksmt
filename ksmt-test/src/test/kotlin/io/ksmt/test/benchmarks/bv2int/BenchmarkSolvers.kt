@@ -20,7 +20,8 @@ class KYicesLazySumSignedLazyOverflow(
     KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
     KBv2IntRewriter.RewriteMode.LAZY,
     KBv2IntRewriter.AndRewriteMode.SUM,
-    KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+    KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
+    KBv2IntRewriter.SignednessMode.UNSIGNED,
 )
 class KZ3LazySumSignedLazyOverflow(
     ctx: KContext
@@ -29,7 +30,8 @@ class KZ3LazySumSignedLazyOverflow(
     KBenchmarkSolverWrapper(ctx, KZ3Solver(ctx)),
     KBv2IntRewriter.RewriteMode.LAZY,
     KBv2IntRewriter.AndRewriteMode.SUM,
-    KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+    KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
+    KBv2IntRewriter.SignednessMode.SIGNED
 )
 class KCvc5LazySumSignedLazyOverflow(
     ctx: KContext
@@ -38,8 +40,10 @@ class KCvc5LazySumSignedLazyOverflow(
     KBenchmarkSolverWrapper(ctx, KCvc5Solver(ctx)),
     KBv2IntRewriter.RewriteMode.LAZY,
     KBv2IntRewriter.AndRewriteMode.SUM,
-    KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+    KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
+    KBv2IntRewriter.SignednessMode.UNSIGNED,
 )
+
 class KYicesLazySumSigned(
     ctx: KContext
 ) : KBv2IntSolver<KYicesSolverConfiguration>(

@@ -22,7 +22,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private val solver: KSolver<Config>,
     private val rewriteMode: RewriteMode = RewriteMode.EAGER,
     private val andRewriteMode: AndRewriteMode = AndRewriteMode.SUM,
-    private val signednessMode: SignednessMode = SignednessMode.UNSIGNED
+    private val signednessMode: SignednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW,
+    private val unsatSignednessMode: SignednessMode = SignednessMode.SIGNED,
 ) : KSolver<Config> by solver {
     init {
         require(ctx.simplificationMode == KContext.SimplificationMode.SIMPLIFY)
