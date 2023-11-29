@@ -3,6 +3,11 @@ name: Run bv2int benchmarks
 on:
   workflow_dispatch:
     inputs:
+      bv2intSolvers:
+        description: Solver configurations to benchmark
+        required: true
+        type: string
+        default: ""
       chunkSize:
         description: Maximal size of a single test data chunk
         required: true
@@ -136,6 +141,7 @@ jobs:
             -PrunBenchmarksBasedTests=true
             -PbenchmarkChunkSize=${{ inputs.chunkSize }}
             -PbenchmarkChunk=${{ matrix.chunk }}
+            -Pbv2intSolvers=${{ inputs.bv2intSolvers }}
 
       - name: Upload bv2int benchmark reports
         uses: actions/upload-artifact@v3
