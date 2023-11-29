@@ -7,15 +7,15 @@ on:
         description: Maximal size of a single test data chunk
         required: true
         type: number
-        default: 10000
+        default: 20
       testDataSize:
         description: Size of test dataset
         required: true
         type: number
-        default: 170000
+        default: 3000
 
 env:
-  TEST_DATA_REVISION: 0.0.1
+  TEST_DATA_REVISION: 0.0.0
 
 jobs:
   setup:
@@ -130,7 +130,6 @@ jobs:
         with:
           arguments: |
             :ksmt-test:test --tests "io.ksmt.test.benchmarks.bv2int.Bv2IntBenchmark.benchmark"
-            -i
             --no-daemon
             --continue
             -PrunBenchmarksBasedTests=true
@@ -169,7 +168,6 @@ jobs:
         with:
           arguments: |
             :ksmt-test:mergeBv2IntBenchmarkReports
-            -i
             --no-daemon
             -PtestReportMergePrefix=bv2int-benchmark-report
             

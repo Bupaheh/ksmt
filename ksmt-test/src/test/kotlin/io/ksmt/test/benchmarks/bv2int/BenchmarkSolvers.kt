@@ -67,3 +67,30 @@ class KCvc5LazySumSigned(
     KBv2IntRewriter.AndRewriteMode.SUM,
     KBv2IntRewriter.SignednessMode.SIGNED
 )
+class KYicesLazySumUnsigned(
+    ctx: KContext
+) : KBv2IntSolver<KYicesSolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
+    KBv2IntRewriter.RewriteMode.LAZY,
+    KBv2IntRewriter.AndRewriteMode.SUM,
+    KBv2IntRewriter.SignednessMode.UNSIGNED
+)
+class KZ3LazySumUnsigned(
+    ctx: KContext
+) : KBv2IntSolver<KZ3SolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KZ3Solver(ctx)),
+    KBv2IntRewriter.RewriteMode.LAZY,
+    KBv2IntRewriter.AndRewriteMode.SUM,
+    KBv2IntRewriter.SignednessMode.UNSIGNED
+)
+class KCvc5LazySumUnsigned(
+    ctx: KContext
+) : KBv2IntSolver<KCvc5SolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KCvc5Solver(ctx)),
+    KBv2IntRewriter.RewriteMode.LAZY,
+    KBv2IntRewriter.AndRewriteMode.SUM,
+    KBv2IntRewriter.SignednessMode.UNSIGNED
+)
