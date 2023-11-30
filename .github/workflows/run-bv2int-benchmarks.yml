@@ -18,9 +18,11 @@ on:
         required: true
         type: number
         default: 3000
-
-env:
-  TEST_DATA_REVISION: 0.0.0
+      testDataRevision:
+        description: Revision of test data
+        required: true
+        type: string
+        default: "0.0.0"
 
 jobs:
   setup:
@@ -57,7 +59,7 @@ jobs:
         env:
           cache-name: cache-test-data
         with:
-          key: test-data-${{ env.TEST_DATA_REVISION }}-${{ matrix.os }}
+          key: test-data-${{ inputs.testDataRevision }}-${{ matrix.os }}
           path: ksmt-test/testData/testData.zip
 
       - name: Set up JDK 1.8
@@ -75,6 +77,7 @@ jobs:
           arguments: |
             :ksmt-test:downloadPreparedBv2IntBenchmarkTestData
             --no-daemon
+            -PtestDataRevision=${{ inputs.testDataRevision }}
 
   run_tests:
     needs: [setup, prepare_test_data]
@@ -97,7 +100,7 @@ jobs:
         env:
           cache-name: cache-test-data
         with:
-          key: test-data-${{ env.TEST_DATA_REVISION }}-${{ matrix.os }}
+          key: test-data-${{ inputs.testDataRevision }}-${{ matrix.os }}
           path: ksmt-test/testData/testData.zip
 
       - name: Check test data downloaded
