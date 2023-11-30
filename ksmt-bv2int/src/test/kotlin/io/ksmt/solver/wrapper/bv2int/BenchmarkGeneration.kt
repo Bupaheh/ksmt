@@ -93,11 +93,20 @@ private inline fun readSmtBenchmarkData(
     paths.forEach { (idx, file) ->
         println("$idx\t${expressions.size}")
 
-        val expr = ctx.mkAnd(parser.parse(file.toPath()))
-
         val fileName = file.toPath().toString()
             .substringAfterLast("Projects/QF_BV/")
             .replace('/', '_')
+
+        try {
+            file.copyTo(File("generatedExpressions/QF_BV_BIT/$fileName"))
+        } catch (_: Exception) { }
+
+        return@forEach
+
+
+        val expr = ctx.mkAnd(parser.parse(file.toPath()))
+
+
 
         if (TempVisitor(ctx).visit(expr) && expr !is KInterpretedValue) {
             try {
@@ -197,14 +206,25 @@ fun main() = with(KContext()) {
 
 //    writeExpressions(ctx, expressions, "generatedExpressions/QF_BV_bslia2")
 
+    val nobitExprs = File("generatedExpressions/QF_BV_UNBIT")
+        .walkBottomUp()
+        .filter { it.extension == "smt2" }
+        .toList()
+        .map { it.path.toString().substringAfterLast('/') }
+        .toSet()
 
     val smtExprs = File("generatedExpressions/QF_BV/SMTcomp2022Exprs.txt")
         .readLines()
         .map { path ->
             path.removePrefix("/non-incremental/")
+        }.filter {
+            val normalized = it.removePrefix("QF_BV/")
+                .replace('/', '_')
+
+            normalized !in nobitExprs
         }.toSet()
 
-    for (i in 61..93) {
+    for (i in 71..94) {
         val ctx = KContext()
         val step = 500
         val exprs = readSmtBenchmarkData(
