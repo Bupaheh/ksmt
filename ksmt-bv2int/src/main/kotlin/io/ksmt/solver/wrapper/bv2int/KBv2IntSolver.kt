@@ -45,7 +45,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private val bv2IntContext = KBv2IntContext(ctx)
     private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, signednessMode)
     private val unsatRewriter by lazy {
-        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, SignednessMode.SIGNED)
+        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, unsatSignednessMode)
     }
 
     private var currentBvAndLemmas = mutableListOf<KExpr<KBoolSort>>()

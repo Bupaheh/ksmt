@@ -112,8 +112,6 @@ val downloadPreparedBenchmarksTestData = downloadPreparedSmtLibBenchmarkTestData
 tasks.withType<Test> {
     if (runBenchmarksBasedTests) {
         dependsOn.add(prepareTestData)
-        // TODO("remove later")
-        println("what is going on: $bv2intSolvers")
         environment("benchmarkChunkMaxSize", benchmarkChunkMaxSize)
         environment("benchmarkChunk", benchmarkChunk)
         environment("bv2intSolvers", bv2intSolvers)
