@@ -683,7 +683,7 @@ class KBv2IntRewriter(
         expr is KBv2IntAuxExprNormalized || expr is KBv2IntAuxExprSingleOverflow ||
                 expr is KBv2IntAuxExprAshr || expr is KBv2IntAuxExprLshr ||
                 expr is KBv2IntAuxExprExtract && isLazyOverflow ||
-                expr is KBv2IntAuxExprShl && isLazyOverflow ||
+                expr is KBv2IntAuxExprShl && isLazyOverflow && !testFlag ||
                 expr is KBv2IntAuxExprZeroExtension || expr is KBv2IntAuxExprConst ||
                 expr is KBv2IntAuxExprLazySignedness
 

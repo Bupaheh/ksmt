@@ -244,7 +244,9 @@ class KBv2IntCustomSolver(
     KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
     rewriteMode,
     andRewriteMode,
-    signednessMode
+    signednessMode,
+    unsatSignednessMode = SignednessMode.UNSIGNED,
+    testFlag = true
 )
 
 fun main() {
@@ -263,12 +265,14 @@ fun main() {
         100000
     ) { name ->
         val normalized = name.substringAfterLast('/')
-        normalized == "Sage2_bench_9761.smt2"
+        normalized == "sage_app7_bench_854.smt2"
     }
 
     expressions.forEach {
         println(KDeclCounter(ctx).countDeclarations(it.second))
     }
+
+//    return
 
     for (solver in solvers) {
         ctx.runBenchmark(
