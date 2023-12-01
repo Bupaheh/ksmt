@@ -85,8 +85,6 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
                 val ksmtAssertion = ctx.mkAnd(worker.convertAssertions(assertions))
 
                 repeat(repeatNum) { repeatIdx ->
-                    println("start measure $name, $configName")
-
                     val res = solverProvider(ctx).use { solver ->
                         measureAssertTime(ksmtAssertion, solver, checkTimeout)
                     }
