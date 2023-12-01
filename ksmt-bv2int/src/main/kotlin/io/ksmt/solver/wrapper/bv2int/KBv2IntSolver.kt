@@ -24,6 +24,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private val andRewriteMode: AndRewriteMode = AndRewriteMode.SUM,
     private val signednessMode: SignednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW,
     private val unsatSignednessMode: SignednessMode = SignednessMode.SIGNED,
+    private val testFlag: Boolean = false
 ) : KSolver<Config> by solver {
     init {
         require(ctx.simplificationMode == KContext.SimplificationMode.SIMPLIFY)
@@ -43,9 +44,9 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         get() = lastUnsatScope <= currentScope
 
     private val bv2IntContext = KBv2IntContext(ctx)
-    private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, signednessMode)
+    private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, signednessMode, testFlag)
     private val unsatRewriter by lazy {
-        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, unsatSignednessMode)
+        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, unsatSignednessMode, testFlag)
     }
 
     private var currentBvAndLemmas = mutableListOf<KExpr<KBoolSort>>()

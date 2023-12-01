@@ -171,7 +171,8 @@ class KBv2IntRewriter(
     private val bv2IntContext: KBv2IntContext,
     private val rewriteMode: RewriteMode = RewriteMode.EAGER,
     private val andRewriteMode: AndRewriteMode = AndRewriteMode.SUM,
-    private val signednessMode: SignednessMode = SignednessMode.UNSIGNED
+    private val signednessMode: SignednessMode = SignednessMode.UNSIGNED,
+    private val testFlag: Boolean = false
 ) : KNonRecursiveTransformer(ctx) {
     enum class AndRewriteMode {
         SUM,
@@ -1300,9 +1301,14 @@ class KBv2IntRewriter(
 
             when {
                 shiftRewriteCondition(shift, sizeBits) -> {
+                    val normalized = if (testFlag) {
+                        normalizeExpr(result, normalizedSignedness, sizeBits)
+                    } else {
+                        ctx.tryNormalizeExpr(result, sizeBits, normalizedSignedness, normalizedSignedness)
+                    }
+
                     KBv2IntAuxExprShl(
-                        normalized = normalizeExpr(result, normalizedSignedness, sizeBits),
-//                        normalized = ctx.tryNormalizeExpr(result, sizeBits, normalizedSignedness, normalizedSignedness),
+                        normalized = normalized,
                         denormalized = result,
                         normalizedSignedness = normalizedSignedness,
                         originalExpr = arg,
