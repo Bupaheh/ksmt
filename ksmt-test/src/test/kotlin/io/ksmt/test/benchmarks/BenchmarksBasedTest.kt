@@ -240,7 +240,7 @@ abstract class BenchmarksBasedTest {
                 }
             }
         } catch (ex: TimeoutCancellationException) {
-//            ignoreTest { "worker timeout -- ${ex.message}" }
+            ignoreTest { "worker timeout -- ${ex.message}" }
         } finally {
             worker.release()
         }
