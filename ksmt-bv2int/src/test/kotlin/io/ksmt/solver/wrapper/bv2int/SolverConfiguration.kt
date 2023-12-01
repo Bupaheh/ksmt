@@ -28,6 +28,7 @@ class SolverConfiguration(
             when (this) {
                 Z3 -> manager.createSolver(ctx, KZ3Solver::class)
                 CVC5 -> manager.createSolver(ctx, KCvc5Solver::class)
+                Yices -> KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx))
                 Yices -> manager.createSolver(ctx, KYicesSolver::class)
                 Bitwuzla -> KBitwuzlaSolver(ctx)
             }
@@ -45,8 +46,8 @@ class SolverConfiguration(
         val result = if (rewriteMode == null) {
             solver.construct(ctx)
         } else {
-//            return@with KBv2IntCustomSolver(ctx)
-            manager.createSolver(ctx, KBv2IntCustomSolver::class)
+            return@with KBv2IntCustomSolver(ctx)
+//            manager.createSolver(ctx, KBv2IntCustomSolver::class)
         }
 
         if (solver == InnerSolver.Z3) {

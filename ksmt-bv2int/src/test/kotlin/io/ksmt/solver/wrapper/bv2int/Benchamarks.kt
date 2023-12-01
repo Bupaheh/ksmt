@@ -50,6 +50,8 @@ import java.io.File
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import io.ksmt.solver.wrapper.bv2int.KBenchmarkSolverWrapper
+
 
 class TempVisitor(ctx: KContext) : KNonRecursiveTransformer(ctx) {
     private var cmp = false
@@ -137,9 +139,15 @@ fun KContext.readFormulas(file: File): List<KExpr<KBoolSort>> {
     return expressions
 }
 
-fun KContext.readFormulas(dirPath: String, begin: Int, end: Int): List<Pair<Int, KExpr<KBoolSort>>> {
+inline fun KContext.readFormulas(
+    dirPath: String,
+    begin: Int,
+    end: Int,
+    filterName: (String) -> Boolean
+): List<Pair<Int, KExpr<KBoolSort>>> {
     val files = File(dirPath).listFiles()
         ?.mapIndexed { id, file -> id to file }
+        ?.filter { filterName(it.second.path) }
         ?.filter { (id, _) -> id in begin..end } ?: return emptyList()
 
     assert(files.all { it.second.extension == "smt2" })
@@ -227,13 +235,13 @@ private fun KContext.runBenchmark(
 val innerSolver = SolverConfiguration.InnerSolver.Yices
 val rewriteMode = RewriteMode.LAZY
 val andRewriteMode = AndRewriteMode.SUM
-val signednessMode = SignednessMode.SIGNED
+val signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW
 
 class KBv2IntCustomSolver(
     ctx: KContext
 ) : KBv2IntSolver<KYicesSolverConfiguration>(
     ctx,
-    KYicesSolver(ctx),
+    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
     rewriteMode,
     andRewriteMode,
     signednessMode
@@ -249,36 +257,32 @@ fun main() {
         SolverConfiguration(innerSolver, rewriteMode, andRewriteMode, signednessMode),
     )
 
-    val expressions = ctx.readFormulas("generatedExpressions/$expressionsFileName", 1634, 2500)
+    val expressions = ctx.readFormulas(
+        "generatedExpressions/$expressionsFileName",
+        0,
+        100000
+    ) { name ->
+        val normalized = name.substringAfterLast('/')
+        normalized == "Sage2_bench_9761.smt2"
+    }
 
-//        .mapIndexed { id, expr -> id + prevCnt[idx] to expr }
-//        .filter { (id, _) -> id in 0..1300 }
-//        .filter { TempVisitor(ctx).visit(it.second) }
+    expressions.forEach {
+        println(KDeclCounter(ctx).countDeclarations(it.second))
+    }
 
-//    return println(expressions.size)
-
-//        .filter { (id, _) -> id in exprToCheck }
-//        .filter { (id, ) -> id !in skipExprs }
-
-//    expressions.forEach { (id, expr) ->
-//        val t = KDeclCounter(ctx).countDeclarations(expr)
-//        println("$id: $t")
-//    }
-//    return
-//
-//    for (solver in solvers) {
-//        ctx.runBenchmark(
-//            outputFile = File("benchmarkResults/trash.csv"),
-////            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
-//            solver = solver,
-//            expressions = expressions,
-//            repeatNum = 1,
-//            timerMode = timerMode,
-//            timeout = timeout
-//        )
-//    }
-//    Solver.manager.close()
-//    return
+    for (solver in solvers) {
+        ctx.runBenchmark(
+            outputFile = File("benchmarkResults/trash.csv"),
+//            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
+            solverConfiguration = solver,
+            expressions = expressions,
+            repeatNum = 1,
+            timerMode = timerMode,
+            timeout = timeout
+        )
+    }
+    SolverConfiguration.manager.close()
+    return
 
 
     for (solver in solvers) {

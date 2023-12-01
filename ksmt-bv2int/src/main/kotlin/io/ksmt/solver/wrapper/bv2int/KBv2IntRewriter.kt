@@ -1301,7 +1301,8 @@ class KBv2IntRewriter(
             when {
                 shiftRewriteCondition(shift, sizeBits) -> {
                     KBv2IntAuxExprShl(
-                        normalized = ctx.tryNormalizeExpr(result, sizeBits, normalizedSignedness, normalizedSignedness),
+                        normalized = normalizeExpr(result, normalizedSignedness, sizeBits),
+//                        normalized = ctx.tryNormalizeExpr(result, sizeBits, normalizedSignedness, normalizedSignedness),
                         denormalized = result,
                         normalizedSignedness = normalizedSignedness,
                         originalExpr = arg,

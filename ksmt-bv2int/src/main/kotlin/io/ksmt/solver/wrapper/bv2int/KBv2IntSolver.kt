@@ -138,7 +138,9 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
             currentOverflowLemmas.forEach { overflowLemma ->
                 LemmaFlatter.flatLemma(overflowLemma).forEach {
-                    isCorrect = isCorrect && (model.eval(it, true) == ctx.trueExpr)
+                    val evalResult = model.eval(it, true)
+
+                    isCorrect = isCorrect && (evalResult == ctx.trueExpr)
                 }
             }
         }
