@@ -23,7 +23,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private val rewriteMode: RewriteMode = RewriteMode.EAGER,
     private val andRewriteMode: AndRewriteMode = AndRewriteMode.SUM,
     private val signednessMode: SignednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW,
-    private val unsatSignednessMode: SignednessMode = SignednessMode.SIGNED,
+    private val unsatSignednessMode: SignednessMode? = SignednessMode.SIGNED,
     private val testFlag: Boolean = false
 ) : KSolver<Config> by solver {
     init {
@@ -44,9 +44,9 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         get() = lastUnsatScope <= currentScope
 
     private val bv2IntContext = KBv2IntContext(ctx)
-    private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, signednessMode, testFlag)
+    private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, signednessMode)
     private val unsatRewriter by lazy {
-        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, unsatSignednessMode, testFlag)
+        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, unsatSignednessMode!!)
     }
 
     private var currentBvAndLemmas = mutableListOf<KExpr<KBoolSort>>()
@@ -108,7 +108,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
         val status: KSolverStatus
 
-        val time = measureNanoTime {
+        measureNanoTime {
             status = if (currentAssumptions.isEmpty()) {
                 solver.check(timeout)
             } else {
@@ -134,6 +134,10 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
         var isCorrect = status == KSolverStatus.SAT
 
+        if (testFlag) {
+            return status
+        }
+
         if (status == KSolverStatus.SAT) {
             val model = solver.model()
 
@@ -153,13 +157,22 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         lastUnsatScope = currentScope
         currentOverflowLemmas.clear()
         currentAssertedExprs = originalExpressions.map { expr ->
-//                ctx.mkAndNoSimplify(ctx.trueExpr, expr).also { currentBvAndLemmas.clear() }
+            if (unsatSignednessMode == null) {
+                return@map ctx.mkAndNoSimplify(ctx.trueExpr, expr).also { currentBvAndLemmas.clear() }
+            }
+
             unsatRewriter.rewriteBv2Int(expr).also { rewritten ->
                 currentBvAndLemmas = unsatRewriter.bvAndLemmas(rewritten).toMutableList()
                 currentOverflowLemmas.add(currentRewriter.overflowLemmas(rewritten))
             }
         }.toMutableList()
-        currentAssumptions = originalAssumptions.map { unsatRewriter.rewriteBv2Int(it) }.toMutableList()
+        currentAssumptions = originalAssumptions.map {
+            if (unsatSignednessMode == null) {
+                return@map ctx.mkAndNoSimplify(ctx.trueExpr, it)
+            }
+
+            unsatRewriter.rewriteBv2Int(it)
+        }.toMutableList()
 
         reassertExpressions()
         return innerCheck(timeLeft(start, timeout))
