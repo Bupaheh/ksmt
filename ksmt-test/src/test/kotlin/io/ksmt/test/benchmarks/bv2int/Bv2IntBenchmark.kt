@@ -25,7 +25,7 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
     private val outputPath = "report.csv"
     private val outputFile = File(outputPath)
     private val checkTimeout =  24.seconds
-    private val repeatNum = 3
+    private val repeatNum = 1
 
     private val solversToBenchmark = System.getenv("bv2intSolvers")
         .orEmpty()
@@ -52,7 +52,8 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
         KZ3EagerSumSigned::class to "Z3-Eager-Sum-Signed",
         KYicesEagerSumUnsigned::class to "Yices-Eager-Sum-Unsigned",
         KCvc5EagerSumUnsigned::class to "Cvc5-Eager-Sum-Unsigned",
-        KYicesLazySumSignedLazyOverflowWoShlLO::class to "Yices-Lazy-Sum-SignedLazyOverflow-WoShLO"
+        KYicesLazySumSignedLazyOverflowTest::class to "Yices-Lazy-Sum-SignedLazyOverflow-Round1Status",
+        KYicesLazySumSignedLazyOverflowOriginalUnsat::class to "Yices-Lazy-Sum-SignedLazyOverflow-OriginalUnsat"
     ).filter { (_, name) -> name in solversToBenchmark }.uncheckedCast()
 
     @ParameterizedTest(name = "{0}")

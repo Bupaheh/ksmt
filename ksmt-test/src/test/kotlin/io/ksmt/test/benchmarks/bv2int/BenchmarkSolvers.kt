@@ -154,7 +154,8 @@ class KCvc5EagerSumUnsigned(
     KBv2IntRewriter.AndRewriteMode.SUM,
     KBv2IntRewriter.SignednessMode.UNSIGNED
 )
-class KYicesLazySumSignedLazyOverflowWoShlLO(
+
+class KYicesLazySumSignedLazyOverflowTest(
     ctx: KContext
 ) : KBv2IntSolver<KYicesSolverConfiguration>(
     ctx,
@@ -164,4 +165,15 @@ class KYicesLazySumSignedLazyOverflowWoShlLO(
     KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
     KBv2IntRewriter.SignednessMode.UNSIGNED,
     true
+)
+
+class KYicesLazySumSignedLazyOverflowOriginalUnsat(
+    ctx: KContext
+) : KBv2IntSolver<KYicesSolverConfiguration>(
+    ctx = ctx,
+    solver = KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
+    rewriteMode = KBv2IntRewriter.RewriteMode.LAZY,
+    andRewriteMode = KBv2IntRewriter.AndRewriteMode.SUM,
+    signednessMode = KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
+    unsatSignednessMode = null,
 )
