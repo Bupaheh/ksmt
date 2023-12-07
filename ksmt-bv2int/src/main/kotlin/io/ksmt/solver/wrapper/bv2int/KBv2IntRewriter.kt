@@ -321,13 +321,39 @@ class KBv2IntRewriter(
     }
 
     override fun <T : KSort> transform(expr: KIteExpr<T>): KExpr<T> = with(ctx) {
-        transformExprAfterTransformedBv2Int<_, _, _, KExpr<KSort>>(
+        transformExprAfterTransformedBv2Int(
             expr,
             expr.condition,
             expr.trueBranch,
             expr.falseBranch,
-            transformer = ::mkIte
-        )
+            preprocessMode = None,
+            postRewriteMode = None,
+        ) { cond: KExpr<KBoolSort>, t: KExpr<KSort>, f: KExpr<KSort> ->
+            if (expr.sort !is KBvSort) return@transformExprAfterTransformedBv2Int mkIte(cond, t, f)
+
+            val tBranch = t.uncheckedCast<_, KBv2IntAuxExpr>()
+            val fBranch = f.uncheckedCast<_, KBv2IntAuxExpr>()
+
+            if (!canNormalize(tBranch) || !canNormalize(fBranch)) {
+                return@transformExprAfterTransformedBv2Int KBv2IntAuxExprDenormalized(
+                    mkIte(cond, tBranch.denormalized, fBranch.denormalized),
+                    tBranch.sizeBits
+                )
+            }
+
+            val signedness = when {
+                tBranch.isNormalizedSigned && fBranch.isNormalizedSigned -> Signedness.SIGNED
+                tBranch.isNormalizedUnsigned && fBranch.isNormalizedUnsigned -> Signedness.UNSIGNED
+                tBranch.isNormalizedSigned -> Signedness.SIGNED
+                else -> Signedness.UNSIGNED
+            }
+
+            KBv2IntAuxExprNormalized(
+                mkIte(cond, tBranch.normalized(signedness), fBranch.normalized(signedness)),
+                tBranch.sizeBits,
+                signedness
+            )
+        }
     }
 
     override fun transform(expr: KBitVec1Value): KExpr<KBv1Sort> = with(ctx) {
