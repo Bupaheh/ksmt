@@ -24,7 +24,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private val andRewriteMode: AndRewriteMode = AndRewriteMode.SUM,
     private val signednessMode: SignednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW,
     private val unsatSignednessMode: SignednessMode? = SignednessMode.SIGNED,
-    private val testFlag: Boolean = false
+    private val round1Result: Boolean = false,
+    private val isSplitterOn: Boolean = false
 ) : KSolver<Config> by solver {
     init {
         require(ctx.simplificationMode == KContext.SimplificationMode.SIMPLIFY)
@@ -44,9 +45,10 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         get() = lastUnsatScope <= currentScope
 
     private val bv2IntContext = KBv2IntContext(ctx)
-    private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, signednessMode)
+    private val splitter = KBv2IntSplitter(ctx)
+    private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, signednessMode, splitter.dsu, isSplitterOn)
     private val unsatRewriter by lazy {
-        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, unsatSignednessMode!!)
+        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, unsatSignednessMode!!, splitter.dsu, isSplitterOn)
     }
 
     private var currentBvAndLemmas = mutableListOf<KExpr<KBoolSort>>()
@@ -59,6 +61,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private var roundCnt = 0
 
     override fun assert(expr: KExpr<KBoolSort>) {
+        splitter.apply(expr)
+
         val rewritten = currentRewriter.rewriteBv2Int(expr)
 
         currentAssertedExprs.add(rewritten)
@@ -134,7 +138,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
         var isCorrect = status == KSolverStatus.SAT
 
-        if (testFlag) {
+        if (round1Result) {
             return status
         }
 
@@ -144,6 +148,10 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
             currentOverflowLemmas.forEach { overflowLemma ->
                 LemmaFlatter.flatLemma(overflowLemma).forEach {
                     val evalResult = model.eval(it, true)
+
+                    if (evalResult != ctx.trueExpr) {
+                        val t = 9
+                    }
 
                     isCorrect = isCorrect && (evalResult == ctx.trueExpr)
                 }

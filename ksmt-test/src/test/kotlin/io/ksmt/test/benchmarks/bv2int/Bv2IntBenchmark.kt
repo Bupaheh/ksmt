@@ -52,8 +52,15 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
         KZ3EagerSumSigned::class to "Z3-Eager-Sum-Signed",
         KYicesEagerSumUnsigned::class to "Yices-Eager-Sum-Unsigned",
         KCvc5EagerSumUnsigned::class to "Cvc5-Eager-Sum-Unsigned",
-        KYicesLazySumSignedLazyOverflowTest::class to "Yices-Lazy-Sum-SignedLazyOverflow-Round1Status",
-        KYicesLazySumSignedLazyOverflowOriginalUnsat::class to "Yices-Lazy-Sum-SignedLazyOverflow-OriginalUnsat"
+
+        KYicesEagerSumSignedLazyOverflow1stRound::class to "Yices-Eager-Sum-SignedLazyOverflow-Round1Status",
+        KYicesEagerSumSignedLazyOverflow1stRoundSplit::class to "Yices-Eager-Sum-SignedLazyOverflow-Round1Status-Split",
+        KYicesEagerSumSignedLazyOverflowOriginalUnsat::class to "Yices-Eager-Sum-SignedLazyOverflow-OriginalUnsat",
+        KYicesEagerSumSignedLazyOverflowOriginalUnsatSplit::class to "Yices-Eager-Sum-SignedLazyOverflow-OriginalUnsat-Split",
+        KYicesEagerSumSignedLazyOverflow::class to "Yices-Eager-Sum-SignedLazyOverflow",
+        KYicesEagerSumSignedLazyOverflowSplit::class to "Yices-Eager-Sum-SignedLazyOverflow-Split",
+        KYicesEagerSumUnsigned::class to "Yices-Eager-Sum-Unsigned",
+        KYicesEagerSumUnsignedSplit::class to "Yices-Eager-Sum-Unsigned-Split",
     ).filter { (_, name) -> name in solversToBenchmark }.uncheckedCast()
 
     @ParameterizedTest(name = "{0}")
