@@ -49,7 +49,7 @@ class KBv2IntSplitter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
     }
 
     private fun handleBitwiseExpr(lhs: KExpr<*>, rhs: KExpr<*>) {
-        dsu.mark(lhs)
+        dsu.mark(listOf(lhs, rhs).first { it !is KInterpretedValue })
     }
 
     override fun <T : KBvSort> transform(expr: KBvAndExpr<T>): KExpr<T> {
