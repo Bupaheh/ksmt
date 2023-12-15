@@ -172,6 +172,8 @@ class KBv2IntRewriter(
     private val rewriteMode: RewriteMode = RewriteMode.EAGER,
     private val andRewriteMode: AndRewriteMode = AndRewriteMode.SUM,
     private val signednessMode: SignednessMode = SignednessMode.UNSIGNED,
+    private val dsu: DisjointSetUnion,
+    private val isSplitterOn: Boolean = false,
     private val testFlag: Boolean = false
 ) : KNonRecursiveTransformer(ctx) {
     enum class AndRewriteMode {
@@ -260,6 +262,8 @@ class KBv2IntRewriter(
 
     private fun KExpr<*>.getOverflowLemma() = overflowLemmas.getOrDefault(tryUnwrap(), ctx.trueExpr)
 
+    private fun shouldTransform(expr: KExpr<*>) = if (isSplitterOn) !dsu.isMarked(expr) else true
+
     override fun <T : KSort, A : KSort> transformApp(expr: KApp<T, A>): KExpr<T> {
         return expr.distributeDependencies(expr.args)
     }
@@ -274,7 +278,7 @@ class KBv2IntRewriter(
             val const = rewriteDecl(expr.decl).apply(listOf())
 
             if (sort is KBvSort) {
-               KBv2IntAuxExprLazySignedness(const.uncheckedCast(), sort.sizeBits)
+                KBv2IntAuxExprLazySignedness(const.uncheckedCast(), sort.sizeBits)
             } else {
                 const
             }
@@ -305,6 +309,11 @@ class KBv2IntRewriter(
     }
 
     override fun <T : KSort> transform(expr: KEqExpr<T>): KExpr<KBoolSort> = with(ctx) {
+        val filtered = expr.args.filter { it !is KInterpretedValue && it.sort is KBvSort }
+        require(filtered.all { shouldTransform(it) } || filtered.none { shouldTransform(it) })
+
+        if (filtered.any { !shouldTransform(it) }) return@with expr
+
         transformExprAfterTransformedBv2Int<_, KExpr<T>, KExpr<T>>(
             expr = expr,
             dependency0 = expr.lhs,
@@ -317,6 +326,11 @@ class KBv2IntRewriter(
 
 
     override fun <T : KSort> transform(expr: KDistinctExpr<T>): KExpr<KBoolSort> = with(ctx) {
+        val filtered = expr.args.filter { it !is KInterpretedValue && it.sort is KBvSort }
+        require(filtered.all { shouldTransform(it) } || filtered.none { shouldTransform(it) })
+
+        if (filtered.any { !shouldTransform(it) }) return@with expr
+
         transformExprAfterTransformedBv2Int(expr, expr.args, transformer = ::mkDistinct)
     }
 
@@ -458,11 +472,14 @@ class KBv2IntRewriter(
         }
     }
 
-    override fun <T : KBvSort> transform(expr: KBvAndExpr<T>): KExpr<T> =
-        when (andRewriteMode) {
+    override fun <T : KBvSort> transform(expr: KBvAndExpr<T>): KExpr<T> {
+        require(!isSplitterOn)
+
+        return when (andRewriteMode) {
             AndRewriteMode.SUM -> transformBvAndSum(expr)
             AndRewriteMode.BITWISE -> transformBvAndBitwise(expr)
         }
+    }
 
     private fun KContext.mkIntBvAnd(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr, bit: UInt): KExpr<KIntSort> {
         return mkIte(
@@ -550,11 +567,13 @@ class KBv2IntRewriter(
                         expr.arg0.uncheckedCast(),
                         arg1
                     )
+
                 expr.arg1 is KBitVecValue<*> ->
                     rewriteBvAndSumConst(
                         expr.arg1.uncheckedCast(),
                         arg0
                     )
+
                 else -> {
                     var acc: KExpr<KIntSort> = 0.expr
 
@@ -585,6 +604,7 @@ class KBv2IntRewriter(
                     application.addBvAndLemma(bvAndLemma)
                         .addLemma(generatePropLemmas(normalizedArg0, normalizedArg1, sizeBits))
                 }
+
                 else -> error("Unexpected")
             }
         }
@@ -647,12 +667,14 @@ class KBv2IntRewriter(
                         arg1,
                         result
                     )
+
                 expr.arg1 is KBitVecValue<*> ->
                     rewriteBvAndBitwiseConst(
                         expr.arg1.uncheckedCast(),
                         arg0,
                         result
                     )
+
                 else -> mkAnd(
                     (0u until expr.sort.sizeBits).map {
                         mkIntBvAndBitwise(arg0, arg1, result, it)
@@ -722,7 +744,13 @@ class KBv2IntRewriter(
         when {
             signednessMode == SignednessMode.SIGNED && canNormalize ->
                 KBv2IntAuxExprSingleOverflow(normalizedSignednessArgsValue, denormalizedValue, sizeBits, signedness)
-            isLazyOverflow && canNormalize -> KBv2IntAuxExprNormalized(normalizedSignednessArgsValue, sizeBits, signedness)
+
+            isLazyOverflow && canNormalize -> KBv2IntAuxExprNormalized(
+                normalizedSignednessArgsValue,
+                sizeBits,
+                signedness
+            )
+
             else -> KBv2IntAuxExprDenormalized(denormalizedValue, sizeBits)
         }
 
@@ -974,6 +1002,11 @@ class KBv2IntRewriter(
     }
 
     override fun <T : KBvSort> transform(expr: KBvUnsignedLessExpr<T>): KExpr<KBoolSort> = with(ctx) {
+        val filtered = expr.args.filter { it !is KInterpretedValue }
+        require(filtered.all { shouldTransform(it) } || filtered.none { shouldTransform(it) })
+
+        if (filtered.any { !shouldTransform(it) }) return@with expr
+
         transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
@@ -987,14 +1020,20 @@ class KBv2IntRewriter(
         mkNot(rewriteSge(arg0, arg1))
     }
 
-    override fun <T : KBvSort> transform(expr: KBvSignedLessExpr<T>): KExpr<KBoolSort> =
-        transformExprAfterTransformedBv2Int(
+    override fun <T : KBvSort> transform(expr: KBvSignedLessExpr<T>): KExpr<KBoolSort> {
+        val filtered = expr.args.filter { it !is KInterpretedValue }
+        require(filtered.all { shouldTransform(it) } || filtered.none { shouldTransform(it) })
+
+        if (filtered.any { !shouldTransform(it) }) return expr
+
+        return transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
             preprocessMode = None,
             transformer = ::rewriteSlt
         )
+    }
 
     private fun KContext.tryRewriteUleConstLshr(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort>? {
         val arg0Normalized = arg0.normalized(Signedness.UNSIGNED)
@@ -1008,7 +1047,7 @@ class KBv2IntRewriter(
 
             arg0 is KBv2IntAuxExprLshr && arg1Normalized is KIntNumExpr -> mkArithLt(
                 arg0.originalExpr.normalized(Signedness.UNSIGNED),
-                (arg1Normalized  + 1.expr) * mkPowerOfTwoExpr(arg0.shift.toUInt())
+                (arg1Normalized + 1.expr) * mkPowerOfTwoExpr(arg0.shift.toUInt())
             )
 
             else -> null
@@ -1027,14 +1066,20 @@ class KBv2IntRewriter(
         }
     }
 
-    override fun <T : KBvSort> transform(expr: KBvUnsignedLessOrEqualExpr<T>): KExpr<KBoolSort> =
-        transformExprAfterTransformedBv2Int(
+    override fun <T : KBvSort> transform(expr: KBvUnsignedLessOrEqualExpr<T>): KExpr<KBoolSort> {
+        val filtered = expr.args.filter { it !is KInterpretedValue }
+        require(filtered.all { shouldTransform(it) } || filtered.none { shouldTransform(it) })
+
+        if (filtered.any { !shouldTransform(it) }) return expr
+
+        return transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
             preprocessMode = None,
             transformer = ::rewriteUle
         )
+    }
 
 //    return when {
 //        arg0Normalized is KIntNumExpr && arg1 is KBv2IntAuxExprLshr -> mkArithLe(
@@ -1062,7 +1107,7 @@ class KBv2IntRewriter(
 
             arg0 is KBv2IntAuxExprAshr && arg1Normalized is KIntNumExpr -> mkArithLt(
                 arg0.originalExpr.normalized(Signedness.SIGNED),
-                (arg1Normalized  + 1.expr) * mkPowerOfTwoExpr(arg0.shift.toUInt())
+                (arg1Normalized + 1.expr) * mkPowerOfTwoExpr(arg0.shift.toUInt())
             )
 
             else -> null
@@ -1110,10 +1155,13 @@ class KBv2IntRewriter(
         when {
             arg0 is KBv2IntAuxExprSingleOverflow && arg1 is KBv2IntAuxExprSingleOverflow ->
                 arg0.normalizedOp { a0 -> arg1.normalizedOp { a1 -> a0 le a1 } }
+
             arg0 is KBv2IntAuxExprSingleOverflow ->
                 arg0.normalizedOp { arg -> arg le arg1.normalized(Signedness.SIGNED) }
+
             arg1 is KBv2IntAuxExprSingleOverflow ->
                 arg1.normalizedOp { arg -> arg0.normalized(Signedness.SIGNED) le arg }
+
             else -> cont()
         }
 
@@ -1127,60 +1175,91 @@ class KBv2IntRewriter(
         }
     }
 
-    override fun <T : KBvSort> transform(expr: KBvSignedLessOrEqualExpr<T>): KExpr<KBoolSort> =
-        transformExprAfterTransformedBv2Int(
+    override fun <T : KBvSort> transform(expr: KBvSignedLessOrEqualExpr<T>): KExpr<KBoolSort> {
+        val filtered = expr.args.filter { it !is KInterpretedValue }
+        require(filtered.all { shouldTransform(it) } || filtered.none { shouldTransform(it) })
+
+        if (filtered.any { !shouldTransform(it) }) return expr
+
+        return transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
             preprocessMode = None,
             transformer = ::rewriteSle
         )
+    }
 
     private fun rewriteUge(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = rewriteUle(arg1, arg0)
 
-    override fun <T : KBvSort> transform(expr: KBvUnsignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> =
-        transformExprAfterTransformedBv2Int(
+    override fun <T : KBvSort> transform(expr: KBvUnsignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> {
+        val filtered = expr.args.filter { it !is KInterpretedValue }
+        require(filtered.all { shouldTransform(it) } || filtered.none { shouldTransform(it) })
+
+        if (filtered.any { !shouldTransform(it) }) return expr
+
+        return transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
             preprocessMode = None,
             transformer = ::rewriteUge
         )
+    }
+
 
     private fun rewriteSge(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> = rewriteSle(arg1, arg0)
 
-    override fun <T : KBvSort> transform(expr: KBvSignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> =
-        transformExprAfterTransformedBv2Int(
+    override fun <T : KBvSort> transform(expr: KBvSignedGreaterOrEqualExpr<T>): KExpr<KBoolSort> {
+        val filtered = expr.args.filter { it !is KInterpretedValue }
+        require(filtered.all { shouldTransform(it) } || filtered.none { shouldTransform(it) })
+
+        if (filtered.any { !shouldTransform(it) }) return expr
+
+        return transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
             preprocessMode = None,
             transformer = ::rewriteSge
         )
+    }
 
     private fun rewriteUgt(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> =
         rewriteUlt(arg1, arg0)
 
-    override fun <T : KBvSort> transform(expr: KBvUnsignedGreaterExpr<T>): KExpr<KBoolSort> =
-        transformExprAfterTransformedBv2Int(
+    override fun <T : KBvSort> transform(expr: KBvUnsignedGreaterExpr<T>): KExpr<KBoolSort> {
+        val filtered = expr.args.filter { it !is KInterpretedValue }
+        require(filtered.all { shouldTransform(it) } || filtered.none { shouldTransform(it) })
+
+        if (filtered.any { !shouldTransform(it) }) return expr
+
+        return transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
             preprocessMode = None,
             transformer = ::rewriteUgt
         )
+    }
 
     private fun rewriteSgt(arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr): KExpr<KBoolSort> =
         rewriteSlt(arg1, arg0)
 
-    override fun <T : KBvSort> transform(expr: KBvSignedGreaterExpr<T>): KExpr<KBoolSort> =
-        transformExprAfterTransformedBv2Int(
+    override fun <T : KBvSort> transform(expr: KBvSignedGreaterExpr<T>): KExpr<KBoolSort> {
+        val filtered = expr.args.filter { it !is KInterpretedValue }
+        require(filtered.all { shouldTransform(it) } || filtered.none { shouldTransform(it) })
+
+        if (filtered.any { !shouldTransform(it) }) return expr
+
+        return transformExprAfterTransformedBv2Int(
             expr = expr,
             dependency0 = expr.arg0,
             dependency1 = expr.arg1,
             preprocessMode = None,
             transformer = ::rewriteSgt
         )
+    }
 
     override fun transform(expr: KBvConcatExpr): KExpr<KBvSort> = with(ctx) {
         transformExprAfterTransformedBv2Int(

@@ -155,19 +155,19 @@ class KCvc5EagerSumUnsigned(
     KBv2IntRewriter.SignednessMode.UNSIGNED
 )
 
-class KYicesLazySumSignedLazyOverflowTest(
+class KYicesEagerSumSignedLazyOverflow1stRound(
     ctx: KContext
 ) : KBv2IntSolver<KYicesSolverConfiguration>(
     ctx,
     KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
-    KBv2IntRewriter.RewriteMode.LAZY,
+    KBv2IntRewriter.RewriteMode.EAGER,
     KBv2IntRewriter.AndRewriteMode.SUM,
     KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
     KBv2IntRewriter.SignednessMode.UNSIGNED,
     true
 )
 
-class KYicesLazySumSignedLazyOverflowOriginalUnsat(
+class KYicesEagerSumSignedLazyOverflowOriginalUnsat(
     ctx: KContext
 ) : KBv2IntSolver<KYicesSolverConfiguration>(
     ctx = ctx,
@@ -176,4 +176,51 @@ class KYicesLazySumSignedLazyOverflowOriginalUnsat(
     andRewriteMode = KBv2IntRewriter.AndRewriteMode.SUM,
     signednessMode = KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
     unsatSignednessMode = null,
+)
+
+class KYicesEagerSumSignedLazyOverflowOriginalUnsatSplit(
+    ctx: KContext
+) : KBv2IntSolver<KYicesSolverConfiguration>(
+    ctx = ctx,
+    solver = KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
+    rewriteMode = KBv2IntRewriter.RewriteMode.EAGER,
+    andRewriteMode = KBv2IntRewriter.AndRewriteMode.SUM,
+    signednessMode = KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
+    isSplitterOn = true,
+    unsatSignednessMode = null,
+)
+
+class KYicesEagerSumSignedLazyOverflow1stRoundSplit(
+    ctx: KContext
+) : KBv2IntSolver<KYicesSolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
+    KBv2IntRewriter.RewriteMode.EAGER,
+    KBv2IntRewriter.AndRewriteMode.SUM,
+    KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
+    KBv2IntRewriter.SignednessMode.UNSIGNED,
+    true
+)
+
+class KYicesEagerSumSignedLazyOverflowSplit(
+    ctx: KContext
+) : KBv2IntSolver<KYicesSolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
+    KBv2IntRewriter.RewriteMode.EAGER,
+    KBv2IntRewriter.AndRewriteMode.SUM,
+    KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
+    KBv2IntRewriter.SignednessMode.UNSIGNED,
+    isSplitterOn = true
+)
+
+class KYicesEagerSumUnsignedSplit(
+    ctx: KContext
+) : KBv2IntSolver<KYicesSolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
+    KBv2IntRewriter.RewriteMode.EAGER,
+    KBv2IntRewriter.AndRewriteMode.SUM,
+    KBv2IntRewriter.SignednessMode.UNSIGNED,
+    isSplitterOn = true
 )

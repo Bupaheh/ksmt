@@ -6,51 +6,30 @@ import com.jetbrains.rd.framework.UnsafeBuffer
 import io.ksmt.KContext
 import io.ksmt.expr.KApp
 import io.ksmt.expr.KBvAndExpr
-import io.ksmt.expr.KBvArithShiftRightExpr
-import io.ksmt.expr.KBvLogicalShiftRightExpr
 import io.ksmt.expr.KBvNAndExpr
 import io.ksmt.expr.KBvNorExpr
 import io.ksmt.expr.KBvOrExpr
-import io.ksmt.expr.KBvShiftLeftExpr
-import io.ksmt.expr.KBvSignedGreaterExpr
-import io.ksmt.expr.KBvSignedGreaterOrEqualExpr
-import io.ksmt.expr.KBvSignedLessExpr
-import io.ksmt.expr.KBvSignedLessOrEqualExpr
-import io.ksmt.expr.KBvUnsignedGreaterExpr
-import io.ksmt.expr.KBvUnsignedGreaterOrEqualExpr
-import io.ksmt.expr.KBvUnsignedLessExpr
-import io.ksmt.expr.KBvUnsignedLessOrEqualExpr
 import io.ksmt.expr.KBvXNorExpr
 import io.ksmt.expr.KBvXorExpr
-import io.ksmt.expr.KEqExpr
 import io.ksmt.expr.KExpr
-import io.ksmt.expr.KInterpretedValue
 import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.runner.serializer.AstSerializationCtx
 import io.ksmt.solver.KSolver
 import io.ksmt.solver.KSolverStatus
-import io.ksmt.solver.bitwuzla.KBitwuzlaSolver
-import io.ksmt.solver.cvc5.KCvc5Solver
-import io.ksmt.solver.cvc5.KCvc5SolverConfiguration
-import io.ksmt.solver.runner.KSolverRunnerManager
 import io.ksmt.solver.yices.KYicesSolver
-import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.sort.KBoolSort
 import io.ksmt.utils.uncheckedCast
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.RewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.AndRewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode
 import io.ksmt.solver.yices.KYicesSolverConfiguration
-import io.ksmt.solver.yices.KYicesSolverUniversalConfiguration
 import io.ksmt.solver.z3.KZ3SMTLibParser
 import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KSort
-import io.ksmt.utils.mkConst
 import java.io.File
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
-import io.ksmt.solver.wrapper.bv2int.KBenchmarkSolverWrapper
 
 
 class TempVisitor(ctx: KContext) : KNonRecursiveTransformer(ctx) {
@@ -246,14 +225,15 @@ class KBv2IntCustomSolver(
     andRewriteMode,
     signednessMode,
     unsatSignednessMode = SignednessMode.UNSIGNED,
-    testFlag = true
+    isSplitterOn = true,
+    round1Result = false,
 )
 
 fun main() {
     val ctx = KContext()
     val timerMode = TimerMode.CHECK_TIME
-    val timeout = 2.seconds
-    val expressionsFileName = "QF_BV_UNBIT"
+    val timeout = 25.seconds
+    val expressionsFileName = "QF_BV_BITS"
     val solvers = listOf(
 //        SolverConfiguration(SolverConfiguration.InnerSolver.Yices),
         SolverConfiguration(innerSolver, rewriteMode, andRewriteMode, signednessMode),
@@ -262,17 +242,26 @@ fun main() {
     val expressions = ctx.readFormulas(
         "generatedExpressions/$expressionsFileName",
         0,
-        100000
+        16
     ) { name ->
         val normalized = name.substringAfterLast('/')
-        normalized == "sage_app7_bench_854.smt2"
+
+//        normalized in exprsToFilter
+        normalized == "2018-Goel-hwbench_QF_BV_pouring.2.prop1_cc_ref_max.smt2"
+        true
+    }.filter { (_, expr) ->
+        val splitter = KBv2IntSplitter(ctx)
+
+        splitter.apply(expr)
+
+        val roots = splitter.dsu.getRoots()
+
+        val cntMarked = roots.count { !splitter.dsu.isMarked(it) }
+
+        cntMarked > 0
     }
 
-    expressions.forEach {
-        println(KDeclCounter(ctx).countDeclarations(it.second))
-    }
-
-//    return
+    println(expressions.size)
 
     for (solver in solvers) {
         ctx.runBenchmark(
@@ -284,6 +273,7 @@ fun main() {
             timerMode = timerMode,
             timeout = timeout
         )
+        println()
     }
     SolverConfiguration.manager.close()
     return
@@ -298,6 +288,7 @@ fun main() {
             timerMode = timerMode,
             timeout
         )
+        println()
     }
 
     SolverConfiguration.manager.close()

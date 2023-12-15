@@ -54,6 +54,7 @@ import java.nio.file.Paths
 import kotlin.io.path.Path
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.relativeTo
+import kotlin.random.Random
 import kotlin.reflect.KClass
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -333,6 +334,7 @@ abstract class BenchmarksBasedTest {
                     filterCondition(name)
                 }
                 .sorted()
+                .shuffled(Random(1))
                 .drop(testDataChunk * testDataChunkSize)
                 .take(testDataChunkSize)
                 .map { BenchmarkTestArguments(it.relativeTo(testDataLocation).toString(), it) }
