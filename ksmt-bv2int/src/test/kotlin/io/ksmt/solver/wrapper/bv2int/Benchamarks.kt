@@ -224,9 +224,8 @@ class KBv2IntCustomSolver(
     rewriteMode,
     andRewriteMode,
     signednessMode,
-    unsatSignednessMode = SignednessMode.UNSIGNED,
+    unsatSignednessMode = null,
     isSplitterOn = true,
-    round1Result = false,
 )
 
 fun main() {
@@ -242,26 +241,13 @@ fun main() {
     val expressions = ctx.readFormulas(
         "generatedExpressions/$expressionsFileName",
         0,
-        16
+        3000
     ) { name ->
         val normalized = name.substringAfterLast('/')
 
 //        normalized in exprsToFilter
-        normalized == "2018-Goel-hwbench_QF_BV_pouring.2.prop1_cc_ref_max.smt2"
-        true
-    }.filter { (_, expr) ->
-        val splitter = KBv2IntSplitter(ctx)
-
-        splitter.apply(expr)
-
-        val roots = splitter.dsu.getRoots()
-
-        val cntMarked = roots.count { !splitter.dsu.isMarked(it) }
-
-        cntMarked > 0
+        normalized == "bv2int-bits-20210219-Sydr_master_yices_predicate_7206.smt2"
     }
-
-    println(expressions.size)
 
     for (solver in solvers) {
         ctx.runBenchmark(
