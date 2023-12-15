@@ -212,7 +212,7 @@ private fun KContext.runBenchmark(
 }
 
 val innerSolver = SolverConfiguration.InnerSolver.Yices
-val rewriteMode = RewriteMode.LAZY
+val rewriteMode = RewriteMode.EAGER
 val andRewriteMode = AndRewriteMode.SUM
 val signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW
 
@@ -234,7 +234,7 @@ fun main() {
     val timeout = 25.seconds
     val expressionsFileName = "QF_BV_BITS"
     val solvers = listOf(
-//        SolverConfiguration(SolverConfiguration.InnerSolver.Yices),
+        SolverConfiguration(SolverConfiguration.InnerSolver.Yices),
         SolverConfiguration(innerSolver, rewriteMode, andRewriteMode, signednessMode),
     )
 
@@ -246,7 +246,7 @@ fun main() {
         val normalized = name.substringAfterLast('/')
 
 //        normalized in exprsToFilter
-        normalized == "bv2int-bits-20210219-Sydr_master_yices_predicate_7206.smt2"
+        normalized == "bv2int-bits-Sage2_bench_13352.smt2"
     }
 
     for (solver in solvers) {
@@ -255,7 +255,7 @@ fun main() {
 //            outputFile = File("benchmarkResults/${expressionsFileName}Test.csv"),
             solverConfiguration = solver,
             expressions = expressions,
-            repeatNum = 1,
+            repeatNum = 10,
             timerMode = timerMode,
             timeout = timeout
         )
