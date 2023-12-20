@@ -6,10 +6,12 @@ import com.jetbrains.rd.framework.UnsafeBuffer
 import io.ksmt.KContext
 import io.ksmt.expr.KExpr
 import io.ksmt.expr.KInterpretedValue
+import io.ksmt.expr.rewrite.simplify.KExprSimplifier
 import io.ksmt.runner.serializer.AstSerializationCtx
 import io.ksmt.solver.KSolverStatus
 import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3SMTLibParser
+import io.ksmt.solver.z3.KZ3SmtLibWriter
 import io.ksmt.sort.KBoolSort
 import io.ksmt.test.GenerationParameters
 import io.ksmt.utils.getValue
@@ -99,6 +101,27 @@ fun KContext.filterExpressions() {
 
 
 fun main() = with(KContext()) {
+    val expressions = readSerializedFormulas(
+        File("generatedExpressions/usvm-exprs"),
+        30001,
+        40000
+    ).filter { (id, expr) ->
+        TempVisitor(this).visit(expr)
+    }
+
+    expressions.forEach { (id, expr) ->
+        val str = KZ3SmtLibWriter(this).write(expr)
+
+        File("generatedExpressions/usvm-unbit/bv2int-usvmunbit-$id.smt2").writeText(str)
+    }
+
+
+
+
+
+
+
+    return
     val dirPath: String = "generatedExpressions/QF_BV_BIT/"
     val begin: Int = 7001
     val end: Int = 7000

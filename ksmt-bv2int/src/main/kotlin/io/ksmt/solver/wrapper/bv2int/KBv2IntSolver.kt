@@ -149,10 +149,6 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
                 LemmaFlatter.flatLemma(overflowLemma).forEach {
                     val evalResult = model.eval(it, true)
 
-                    if (evalResult != ctx.trueExpr) {
-                        val t = 9
-                    }
-
                     isCorrect = isCorrect && (evalResult == ctx.trueExpr)
                 }
             }
