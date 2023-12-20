@@ -1,8 +1,14 @@
 name: Run bv2int benchmarks
+run-name: Bv2int benchmark, ${{ inputs.name }}
 
 on:
   workflow_dispatch:
     inputs:
+      name:
+        description: Name of the run
+        required: true
+        type: string
+        default: "default"
       bv2intSolvers:
         description: Solver configurations to benchmark
         required: true
