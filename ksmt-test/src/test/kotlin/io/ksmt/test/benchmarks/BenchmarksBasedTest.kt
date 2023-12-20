@@ -343,7 +343,7 @@ abstract class BenchmarksBasedTest {
 
         private fun prepareTestData(
             filterCondition: (String) -> Boolean,
-            shuffled: Boolean
+            shuffled: Boolean = false
         ): List<BenchmarkTestArguments> {
             val testDataLocation = testDataLocation()
             return testDataLocation
@@ -363,8 +363,11 @@ abstract class BenchmarksBasedTest {
                 .ensureNotEmpty()
         }
 
-        fun testData(shuffled: Boolean = false, filterCondition: (String) -> Boolean = { true }) =
-            prepareTestData(filterCondition, shuffled)
+        fun testData(filterCondition: (String) -> Boolean = { true }) =
+            prepareTestData(filterCondition)
+
+        fun testDataShuffled(filterCondition: (String) -> Boolean = { true }) =
+            prepareTestData(filterCondition, true)
 
         /**
          * Parametrized tests require at least one argument.

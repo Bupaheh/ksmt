@@ -173,6 +173,6 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
 
     companion object {
         @JvmStatic
-        fun bv2intTestData() = testData(shuffled = true) { it.startsWith("bv2int-") }
+        fun bv2intTestData() = testDataShuffled { it.startsWith("bv2int-") }
     }
 }
