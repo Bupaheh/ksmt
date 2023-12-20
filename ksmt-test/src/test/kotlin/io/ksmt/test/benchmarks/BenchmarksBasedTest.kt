@@ -324,7 +324,10 @@ abstract class BenchmarksBasedTest {
             ?.let { Paths.get(it) }
             ?: error("No test data")
 
-        private fun prepareTestData(filterCondition: (String) -> Boolean): List<BenchmarkTestArguments> {
+        private fun prepareTestData(
+            filterCondition: (String) -> Boolean,
+            shuffled: Boolean
+        ): List<BenchmarkTestArguments> {
             val testDataLocation = testDataLocation()
             return testDataLocation
                 .listDirectoryEntries("*.smt2")
@@ -334,7 +337,7 @@ abstract class BenchmarksBasedTest {
                     filterCondition(name)
                 }
                 .sorted()
-                .shuffled(Random(1))
+                .run { if (shuffled) shuffled(Random(1)) else this@run }
                 .drop(testDataChunk * testDataChunkSize)
                 .take(testDataChunkSize)
                 .map { BenchmarkTestArguments(it.relativeTo(testDataLocation).toString(), it) }
@@ -343,7 +346,8 @@ abstract class BenchmarksBasedTest {
                 .ensureNotEmpty()
         }
 
-        fun testData(filterCondition: (String) -> Boolean = { true }) = prepareTestData(filterCondition)
+        fun testData(shuffled: Boolean = false, filterCondition: (String) -> Boolean = { true }) =
+            prepareTestData(filterCondition, shuffled)
 
         /**
          * Parametrized tests require at least one argument.

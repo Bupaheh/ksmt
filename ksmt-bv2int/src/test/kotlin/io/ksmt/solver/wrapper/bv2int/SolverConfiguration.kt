@@ -16,7 +16,8 @@ class SolverConfiguration(
     private val solver: InnerSolver,
     private val rewriteMode: KBv2IntRewriter.RewriteMode? = null,
     private val andRewriteMode: KBv2IntRewriter.AndRewriteMode = KBv2IntRewriter.AndRewriteMode.SUM,
-    private val signednessMode: KBv2IntRewriter.SignednessMode = KBv2IntRewriter.SignednessMode.UNSIGNED
+    private val signednessMode: KBv2IntRewriter.SignednessMode = KBv2IntRewriter.SignednessMode.UNSIGNED,
+    private val unsignedMode: KBv2IntRewriter.SignednessMode? = KBv2IntRewriter.SignednessMode.UNSIGNED,
 ) {
     enum class InnerSolver {
         Z3,
@@ -46,7 +47,8 @@ class SolverConfiguration(
         val result = if (rewriteMode == null) {
             solver.construct(ctx)
         } else {
-            return@with KBv2IntCustomSolver(ctx)
+//            return@with
+            KBv2IntCustomSolver(ctx)
 //            manager.createSolver(ctx, KBv2IntCustomSolver::class)
         }
 
@@ -79,6 +81,14 @@ class SolverConfiguration(
             KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflow"
             KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
             KBv2IntRewriter.SignednessMode.SIGNED -> "-Signed"
+        }
+
+        suffix += when (unsignedMode) {
+            KBv2IntRewriter.SignednessMode.UNSIGNED -> ""
+            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflow"
+            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
+            KBv2IntRewriter.SignednessMode.SIGNED -> "-Signed"
+            null -> "-OriginalUnsat"
         }
 
         return prefix + innerSolver + suffix
