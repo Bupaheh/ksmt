@@ -13,7 +13,7 @@ import io.ksmt.solver.z3.KZ3SolverConfiguration
 class KYicesSolverBench(ctx: KContext) : KBenchmarkSolverWrapper<KYicesSolverConfiguration>(ctx, KYicesSolver(ctx))
 class KZ3SolverBench(ctx: KContext) : KBenchmarkSolverWrapper<KZ3SolverConfiguration>(ctx, KZ3Solver(ctx))
 class KCvc5SolverBench(ctx: KContext) : KBenchmarkSolverWrapper<KCvc5SolverConfiguration>(ctx, KCvc5Solver(ctx))
-class KYicesLazySumSignedLazyOverflow(
+class KYicesLazySumSignedLazyOverflowUnsignedUnsat(
     ctx: KContext
 ) : KBv2IntSolver<KYicesSolverConfiguration>(
     ctx,
@@ -23,7 +23,30 @@ class KYicesLazySumSignedLazyOverflow(
     KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
     KBv2IntRewriter.SignednessMode.UNSIGNED,
 )
-class KZ3LazySumSignedLazyOverflow(
+
+class KYicesLazySumSignedLazyOverflowSignedUnsat(
+    ctx: KContext
+) : KBv2IntSolver<KYicesSolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
+    KBv2IntRewriter.RewriteMode.LAZY,
+    KBv2IntRewriter.AndRewriteMode.SUM,
+    KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
+    KBv2IntRewriter.SignednessMode.SIGNED,
+)
+
+class KZ3LazySumSignedLazyOverflowUnsignedUnsat(
+    ctx: KContext
+) : KBv2IntSolver<KZ3SolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KZ3Solver(ctx)),
+    KBv2IntRewriter.RewriteMode.LAZY,
+    KBv2IntRewriter.AndRewriteMode.SUM,
+    KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
+    KBv2IntRewriter.SignednessMode.UNSIGNED
+)
+
+class KZ3LazySumSignedLazyOverflowSignedUnsat(
     ctx: KContext
 ) : KBv2IntSolver<KZ3SolverConfiguration>(
     ctx,
@@ -33,6 +56,7 @@ class KZ3LazySumSignedLazyOverflow(
     KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
     KBv2IntRewriter.SignednessMode.SIGNED
 )
+
 class KCvc5LazySumSignedLazyOverflow(
     ctx: KContext
 ) : KBv2IntSolver<KCvc5SolverConfiguration>(
