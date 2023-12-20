@@ -141,7 +141,7 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
                 timeout.inWholeNanoseconds,
                 KSolverStatus.UNKNOWN,
                 -2,
-                e.message
+                e.toString().replace("\n", "").replace(",", "")
             )
         }
 
