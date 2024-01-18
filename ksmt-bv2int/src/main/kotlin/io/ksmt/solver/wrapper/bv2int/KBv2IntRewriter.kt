@@ -1397,6 +1397,8 @@ class KBv2IntRewriter(
         ) { arg: KBv2IntAuxExpr, shift: KBv2IntAuxExpr ->
             if (shift.normalized(Signedness.UNSIGNED) == 0.expr) return@transformExprAfterTransformedBv2Int arg
 
+//            if (arg.denormalized is KConst) return@transformExprAfterTransformedBv2Int arg
+
             val sizeBits = expr.sort.sizeBits
             val normalizedShift = shift.normalized(Signedness.UNSIGNED)
             val normalizedSignedness: Signedness = if (arg.isNormalizedUnsigned) {

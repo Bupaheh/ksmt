@@ -61,7 +61,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private var roundCnt = 0
 
     override fun assert(expr: KExpr<KBoolSort>) {
-        splitter.apply(expr)
+        if (isSplitterOn) splitter.apply(expr)
 
         val rewritten = currentRewriter.rewriteBv2Int(expr)
 
@@ -132,25 +132,20 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
             signednessMode == SignednessMode.SIGNED ||
             status == KSolverStatus.UNKNOWN ||
             isUnsatRewriter
+            || round1Result
         ) {
             return status
         }
 
         var isCorrect = status == KSolverStatus.SAT
 
-        if (round1Result) {
-            return status
-        }
-
         if (status == KSolverStatus.SAT) {
             val model = solver.model()
 
             currentOverflowLemmas.forEach { overflowLemma ->
-                LemmaFlatter.flatLemma(overflowLemma).forEach {
-                    val evalResult = model.eval(it, true)
+                val evalResult = model.eval(overflowLemma, true)
 
-                    isCorrect = isCorrect && (evalResult == ctx.trueExpr)
-                }
+                isCorrect = isCorrect && (evalResult == ctx.trueExpr)
             }
         }
 
@@ -230,7 +225,23 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         }.also { lastCheckStatus = it }
     }
 
+    override fun push() {
+        // TODO("incorrect implementation")
+
+        solver.push()
+    }
+
     override fun pop(n: UInt) {
+        // TODO("incorrect implementation")
+
+        lastUnsatScope = UInt.MAX_VALUE
+        currentBvAndLemmas.clear()
+        currentOverflowLemmas.clear()
+        originalExpressions.clear()
+        currentAssertedExprs.clear()
+        currentAssumptions.clear()
+        originalAssumptions = listOf()
+
         solver.pop(n)
     }
 
@@ -246,5 +257,9 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         }
 
         return KBv2IntModel(ctx, bv2IntContext, solver.model())
+    }
+
+    override fun close() {
+        solver.close()
     }
 }

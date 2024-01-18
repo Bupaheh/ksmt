@@ -30,7 +30,9 @@ import io.ksmt.sort.KBoolSort
 import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KSort
 
-
+/**
+ * TODO() из-за упрощения при apply мы можем получать уже другое выражение, надо переписать на визиторах
+ */
 class KBv2IntSplitter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
     val dsu = DisjointSetUnion()
 
