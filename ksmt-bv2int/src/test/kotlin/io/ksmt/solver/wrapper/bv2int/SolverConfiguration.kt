@@ -13,6 +13,7 @@ import io.ksmt.utils.mkConst
 import kotlin.time.Duration.Companion.seconds
 
 class SolverConfiguration(
+    private val ctx: KContext,
     private val solver: InnerSolver,
     private val rewriteMode: KBv2IntRewriter.RewriteMode? = null,
     private val andRewriteMode: KBv2IntRewriter.AndRewriteMode = KBv2IntRewriter.AndRewriteMode.SUM,
@@ -27,7 +28,7 @@ class SolverConfiguration(
 
         fun construct(ctx: KContext) =
             when (this) {
-                Z3 -> manager.createSolver(ctx, KZ3Solver::class)
+                Z3 -> KBenchmarkSolverWrapper(ctx, KZ3Solver(ctx))
                 CVC5 -> manager.createSolver(ctx, KCvc5Solver::class)
                 Yices -> KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx))
                 Yices -> manager.createSolver(ctx, KYicesSolver::class)
@@ -43,20 +44,30 @@ class SolverConfiguration(
             }
     }
 
+    private lateinit var constructedSolver: KSolver<*>
+
+    fun initSolver() {
+        constructedSolver = if (rewriteMode == null) {
+            solver.construct(ctx)
+        } else {
+            KBv2IntCustomSolver(ctx)
+        }
+    }
+
+    fun closeSolver() {
+        constructedSolver.close()
+    }
+
     fun construct(ctx: KContext): KSolver<*> = with(ctx) {
+        return@with constructedSolver
+
+
         val result = if (rewriteMode == null) {
             solver.construct(ctx)
         } else {
 //            return@with
             KBv2IntCustomSolver(ctx)
 //            manager.createSolver(ctx, KBv2IntCustomSolver::class)
-        }
-
-        if (solver == InnerSolver.Z3) {
-            result.push()
-            result.assert(boolSort.mkConst("a"))
-            result.check()
-            result.pop()
         }
 
         result
@@ -83,12 +94,14 @@ class SolverConfiguration(
             KBv2IntRewriter.SignednessMode.SIGNED -> "-Signed"
         }
 
-        suffix += when (unsignedMode) {
-            KBv2IntRewriter.SignednessMode.UNSIGNED -> ""
-            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflow"
-            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
-            KBv2IntRewriter.SignednessMode.SIGNED -> "-Signed"
-            null -> "-OriginalUnsat"
+        if (signednessMode == KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW) {
+            suffix += when (unsignedMode) {
+                KBv2IntRewriter.SignednessMode.UNSIGNED -> ""
+                KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflow"
+                KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
+                KBv2IntRewriter.SignednessMode.SIGNED -> "-Signed"
+                null -> "-OriginalUnsat"
+            }
         }
 
         return prefix + innerSolver + suffix
@@ -98,7 +111,7 @@ class SolverConfiguration(
         val manager = KSolverRunnerManager(hardTimeout = 5.seconds, workerProcessIdleTimeout = 40.seconds)
 
         init {
-            manager.registerSolver(KBv2IntCustomSolver::class, KYicesSolverUniversalConfiguration::class)
+//            manager.registerSolver(KBv2IntCustomSolver::class, KYicesSolverUniversalConfiguration::class)
         }
     }
 }
