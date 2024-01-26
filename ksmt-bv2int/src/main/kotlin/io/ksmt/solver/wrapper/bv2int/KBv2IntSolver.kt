@@ -66,9 +66,9 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         val rewritten = currentRewriter.rewriteBv2Int(expr)
 
         currentAssertedExprs.add(rewritten)
-        currentOverflowLemmas.add(currentRewriter.overflowLemmas(rewritten))
 
         if (signednessMode != SignednessMode.UNSIGNED && signednessMode != SignednessMode.SIGNED) {
+            currentOverflowLemmas.add(currentRewriter.overflowLemmas(rewritten))
             originalExpressions.add(expr)
         }
 

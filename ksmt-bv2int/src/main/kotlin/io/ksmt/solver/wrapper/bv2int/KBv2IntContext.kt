@@ -9,14 +9,20 @@ import io.ksmt.sort.KBoolSort
 import io.ksmt.sort.KIntSort
 import io.ksmt.sort.KSort
 import io.ksmt.utils.uncheckedCast
+import java.util.IdentityHashMap
 
 class KBv2IntContext(val ctx: KContext) {
     val bvAndFunc = with(ctx) { mkFreshFuncDecl("bvAnd", intSort, listOf(intSort, intSort)) }
     val powerOfTwoFunc = with(ctx) { mkFreshFuncDecl("pow2", intSort, listOf(intSort)) }
 
-    private val declarations = hashMapOf<KDecl<*>, KDecl<*>>()
+    private val declarations = IdentityHashMap<KDecl<*>, KDecl<*>>()
     private val auxDecls = hashSetOf<KDecl<*>>(bvAndFunc, powerOfTwoFunc)
-    private val bvAndLemmaApplication = hashMapOf<KExpr<KBoolSort>, KExpr<KIntSort>>()
+    private val bvAndLemmaApplication = IdentityHashMap<KExpr<KBoolSort>, KExpr<KIntSort>>()
+
+    val zero = ctx.mkIntNum(0)
+    val one = ctx.mkIntNum(1)
+    val minusOne = ctx.mkIntNum(-1)
+    val two = ctx.mkIntNum(2)
 
     fun saveDecl(originalDecl: KDecl<*>, rewrittenDecl: KDecl<*>) {
         declarations[originalDecl] = rewrittenDecl
@@ -26,6 +32,7 @@ class KBv2IntContext(val ctx: KContext) {
     fun isAuxDecl(decl: KDecl<*>): Boolean = decl in auxDecls
 
     fun saveAuxDecl(decl: KDecl<*>): Boolean = auxDecls.add(decl)
+
     fun mkPowerOfTwoApp(power: KExpr<KIntSort>): KExpr<KIntSort> = with(ctx) {
         if (power is KIntNumExpr) {
             mkArithPower(2.expr, power)
