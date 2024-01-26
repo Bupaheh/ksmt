@@ -18,6 +18,7 @@ import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.runner.serializer.AstSerializationCtx
 import io.ksmt.solver.KSolver
 import io.ksmt.solver.KSolverStatus
+import io.ksmt.solver.util.KExprIntInternalizerBase
 import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.sort.KBoolSort
 import io.ksmt.utils.uncheckedCast
@@ -32,6 +33,8 @@ import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.solver.z3.KZ3SolverConfiguration
 import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KSort
+import io.ksmt.utils.getValue
+import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap
 import java.io.File
 import kotlin.random.Random
 import kotlin.system.measureNanoTime
@@ -298,17 +301,17 @@ private fun KContext.runBenchmarkUsvm(
     }
 }
 
-val innerSolver = SolverConfiguration.InnerSolver.Z3
+val innerSolver = SolverConfiguration.InnerSolver.Yices
 val rewriteMode = RewriteMode.EAGER
 val andRewriteMode = AndRewriteMode.SUM
-val signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW
+val signednessMode = SignednessMode.SIGNED
 val unsignedMode: SignednessMode? = SignednessMode.SIGNED
 
 class KBv2IntCustomSolver(
     ctx: KContext,
-) : KBv2IntSolver<KZ3SolverConfiguration>(
+) : KBv2IntSolver<KYicesSolverConfiguration>(
     ctx,
-    KBenchmarkSolverWrapper(ctx, KZ3Solver(ctx)),
+    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
     rewriteMode,
     andRewriteMode,
     signednessMode,
@@ -317,7 +320,7 @@ class KBv2IntCustomSolver(
     round1Result = false
 ) {
     init {
-        val solverName = innerSolver.toString()
+        val solverName = innerSolver.toString().removeSuffix("MCSAT")
         val configName = KBv2IntCustomSolver::class.supertypes.single().arguments.single().toString()
 
         require(solverName in configName)
@@ -327,7 +330,7 @@ class KBv2IntCustomSolver(
 fun main() {
     val ctx = KContext()
     val timeout = 1.seconds
-    val expressionsFileName = "usvm-exprs"
+    val expressionsFileName = "usvm-exprs5"
     val solvers = listOf(
 //        SolverConfiguration(ctx, innerSolver),
         SolverConfiguration(ctx, innerSolver, rewriteMode, andRewriteMode, signednessMode, unsignedMode),
@@ -336,11 +339,15 @@ fun main() {
     val expressions = ctx.readSerializedFormulasUsvm(
         File("generatedExpressions/$expressionsFileName"),
         0,
-        600
-    ).filter { it.first !in listOf("513", "514") }
+        1000000
+    )
+        .filter { it.first !in listOf("513", "514") }
         .map { (id, l) ->
             id to l.filter { expr -> TempVisitor(ctx).visit(expr) }
+                .filter { ArithFilter(ctx).filter(it) }
         }
+//        .filter { it.first == "5" }
+//        .map { (id, l) -> id to l.take(35023) }
 
 
 //    val expressions = ctx.readFormulas(
@@ -364,7 +371,8 @@ fun main() {
 
     for (solver in solvers) {
         ctx.runBenchmarkUsvm(
-            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT-New.csv"),
+//            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT.csv"),
+            outputFile = File("benchmarkResults/trash.csv"),
             solverConfiguration = solver,
             expressions = expressions,
             timeout

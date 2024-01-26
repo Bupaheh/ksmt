@@ -2,6 +2,7 @@ package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.KContext
 import io.ksmt.expr.KAndBinaryExpr
+import io.ksmt.expr.KAndExpr
 import io.ksmt.expr.KExpr
 import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.sort.KBoolSort
@@ -11,7 +12,7 @@ class LemmaFlatter private constructor(ctx: KContext) : KNonRecursiveTransformer
     private val lemmas: MutableList<KExpr<KBoolSort>> = mutableListOf()
 
     override fun <T : KSort> exprTransformationRequired(expr: KExpr<T>): Boolean {
-        return expr is KAndBinaryExpr
+        return expr is KAndExpr
     }
 
     override fun transform(expr: KAndBinaryExpr): KExpr<KBoolSort> =
@@ -22,8 +23,15 @@ class LemmaFlatter private constructor(ctx: KContext) : KNonRecursiveTransformer
             expr
         }
 
+    override fun transform(expr: KAndExpr): KExpr<KBoolSort> =
+        transformExprAfterTransformed(expr, expr.args) { args ->
+            args.forEach { processDependency(it) }
+
+            expr
+        }
+
     private fun processDependency(expr: KExpr<KBoolSort>) {
-        if (expr is KAndBinaryExpr || expr == ctx.trueExpr) return
+        if (expr is KAndExpr || expr == ctx.trueExpr) return
         lemmas.add(expr)
     }
 

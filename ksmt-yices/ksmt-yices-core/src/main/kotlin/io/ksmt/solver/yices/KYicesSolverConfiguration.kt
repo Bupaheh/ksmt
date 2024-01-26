@@ -8,6 +8,8 @@ import io.ksmt.solver.KSolverUnsupportedParameterException
 interface KYicesSolverConfiguration : KSolverConfiguration {
     fun setYicesOption(option: String, value: String)
 
+    fun defaultForLogic(logic: String)
+
     override fun setStringParameter(param: String, value: String) {
         setYicesOption(param, value)
     }
@@ -29,6 +31,10 @@ class KYicesSolverConfigurationImpl(private val config: Config) : KYicesSolverCo
     override fun setYicesOption(option: String, value: String) {
         config.set(option, value)
     }
+
+    override fun defaultForLogic(logic: String) {
+        config.defaultConfigForLogic(logic)
+    }
 }
 
 class KYicesSolverUniversalConfiguration(
@@ -36,5 +42,9 @@ class KYicesSolverUniversalConfiguration(
 ) : KYicesSolverConfiguration {
     override fun setYicesOption(option: String, value: String) {
         builder.buildStringParameter(option, value)
+    }
+
+    override fun defaultForLogic(logic: String) {
+        TODO("Not yet implemented")
     }
 }

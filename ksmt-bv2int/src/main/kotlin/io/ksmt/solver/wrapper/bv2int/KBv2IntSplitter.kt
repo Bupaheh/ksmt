@@ -32,6 +32,7 @@ import io.ksmt.sort.KSort
 
 /**
  * TODO() из-за упрощения при apply мы можем получать уже другое выражение, надо переписать на визиторах
+ * вроде неправда, т.к. super.transform
  */
 class KBv2IntSplitter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
     val dsu = DisjointSetUnion()

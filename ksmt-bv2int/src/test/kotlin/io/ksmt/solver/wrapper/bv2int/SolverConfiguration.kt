@@ -30,7 +30,12 @@ class SolverConfiguration(
             when (this) {
                 Z3 -> KBenchmarkSolverWrapper(ctx, KZ3Solver(ctx))
                 CVC5 -> manager.createSolver(ctx, KCvc5Solver::class)
-                Yices -> KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx))
+                Yices -> KBenchmarkSolverWrapper(
+                    ctx,
+                    KYicesSolver(ctx).apply {
+//                        configure { defaultForLogic("QF_NIA") }
+                    }
+                )
                 Yices -> manager.createSolver(ctx, KYicesSolver::class)
                 Bitwuzla -> KBitwuzlaSolver(ctx)
             }
@@ -75,7 +80,7 @@ class SolverConfiguration(
 
     override fun toString(): String {
         val innerSolver = solver.toString()
-        if (rewriteMode == null) return innerSolver
+        if (rewriteMode == null) return innerSolver + "2"
 
         val prefix = when (rewriteMode) {
             KBv2IntRewriter.RewriteMode.EAGER -> "Eager-"
