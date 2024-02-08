@@ -143,8 +143,6 @@ fun KContext.readSerializedFormulasUsvm(dir: File, begin: Int, end: Int): List<P
     files
 //        .shuffled(Random(1))
         .sortedBy { it.path.substringAfterLast("/").toInt() }
-        .drop(begin)
-        .take(end - begin + 1)
         .forEach { file ->
             val srcSerializationCtx = AstSerializationCtx().apply { initCtx(this@readSerializedFormulasUsvm) }
             val srcMarshaller = AstSerializationCtx.marshaller(srcSerializationCtx)
@@ -165,7 +163,7 @@ fun KContext.readSerializedFormulasUsvm(dir: File, begin: Int, end: Int): List<P
             expressions.add(normalizedPath to currentExpressions)
         }
 
-    return expressions
+    return expressions.map { it.first to it.second.drop(begin).take(end - begin + 1) }
 }
 
 inline fun KContext.readFormulas(
@@ -225,9 +223,10 @@ private fun KContext.measureAssertTime(
             solver.assert(expr)
             status = solver.check(timeout)
 
-            if (status == KSolverStatus.SAT) { solver.model() }
+//            if (status == KSolverStatus.SAT) { solver.model() }
         }
     } catch (e: Throwable) {
+        throw e
         println(e.message)
 //        solver.close()
         return MeasureAssertTimeResult(timeout.inWholeNanoseconds, timeout.inWholeNanoseconds, KSolverStatus.UNKNOWN, -2)
@@ -305,7 +304,7 @@ val innerSolver = SolverConfiguration.InnerSolver.Yices
 val rewriteMode = RewriteMode.EAGER
 val andRewriteMode = AndRewriteMode.SUM
 val signednessMode = SignednessMode.SIGNED
-val unsignedMode: SignednessMode? = SignednessMode.SIGNED
+val unsignedMode: SignednessMode? = null
 
 class KBv2IntCustomSolver(
     ctx: KContext,
@@ -316,7 +315,7 @@ class KBv2IntCustomSolver(
     andRewriteMode,
     signednessMode,
     unsatSignednessMode = unsignedMode,
-    isSplitterOn = false,
+    isSplitterOn = true,
     round1Result = false
 ) {
     init {
@@ -330,22 +329,23 @@ class KBv2IntCustomSolver(
 fun main() {
     val ctx = KContext()
     val timeout = 1.seconds
-    val expressionsFileName = "usvm-exprs5"
+    val expressionsFileName = "usvm-owasp"
     val solvers = listOf(
 //        SolverConfiguration(ctx, innerSolver),
         SolverConfiguration(ctx, innerSolver, rewriteMode, andRewriteMode, signednessMode, unsignedMode),
     )
+    SolverConfiguration.manager.close()
 
     val expressions = ctx.readSerializedFormulasUsvm(
         File("generatedExpressions/$expressionsFileName"),
         0,
-        1000000
+        10000
     )
-        .filter { it.first !in listOf("513", "514") }
         .map { (id, l) ->
-            id to l.filter { expr -> TempVisitor(ctx).visit(expr) }
-                .filter { ArithFilter(ctx).filter(it) }
+            id to l.filterNot { expr -> TempVisitor(ctx).visit(expr) }.take(400).drop(6)
+//                .filter { ArithFilter(ctx).filter(it) }
         }
+        .drop(1)
 //        .filter { it.first == "5" }
 //        .map { (id, l) -> id to l.take(35023) }
 
@@ -371,7 +371,7 @@ fun main() {
 
     for (solver in solvers) {
         ctx.runBenchmarkUsvm(
-//            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT.csv"),
+//            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT-woM.csv"),
             outputFile = File("benchmarkResults/trash.csv"),
             solverConfiguration = solver,
             expressions = expressions,
@@ -379,6 +379,4 @@ fun main() {
         )
         println()
     }
-
-    SolverConfiguration.manager.close()
 }

@@ -52,4 +52,10 @@ class DisjointSetUnion {
     fun isMarked(a: KExpr<*>) =
         mark.getOrDefault(find(a), false)
     fun getRoots() = parent.keys.filter { parent[it] == it }
+
+    fun clear() {
+        parent.clear()
+        size.clear()
+        mark.clear()
+    }
 }

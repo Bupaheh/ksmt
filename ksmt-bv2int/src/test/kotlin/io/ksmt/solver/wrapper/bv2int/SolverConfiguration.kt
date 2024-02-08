@@ -80,7 +80,7 @@ class SolverConfiguration(
 
     override fun toString(): String {
         val innerSolver = solver.toString()
-        if (rewriteMode == null) return innerSolver + "2"
+        if (rewriteMode == null) return innerSolver
 
         val prefix = when (rewriteMode) {
             KBv2IntRewriter.RewriteMode.EAGER -> "Eager-"
