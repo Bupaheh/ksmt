@@ -201,7 +201,7 @@ class KBv2IntRewriter(
     } else {
         Signedness.SIGNED
     }
-    
+
     private val defaultWrapMode = when (signedness) {
         Signedness.UNSIGNED -> WrapMode.NORMALIZED_UNSIGNED
         Signedness.SIGNED -> WrapMode.NORMALIZED_SIGNED
@@ -210,9 +210,9 @@ class KBv2IntRewriter(
     private val isLazyOverflow: Boolean = signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW ||
             signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS
 
-    private val lemmas = IdentityHashMap<KExpr<*>, KExpr<KBoolSort>>()
-    private val overflowLemmas = IdentityHashMap<KExpr<*>, KExpr<KBoolSort>>()
-    private val bvAndLemmas = IdentityHashMap<KExpr<*>, KExpr<KBoolSort>>()
+    private val lemmas = IdentityHashMap<KExpr<*>, Bv2IntLemma>()
+    private val overflowLemmas = IdentityHashMap<KExpr<*>, Bv2IntLemma>()
+    private val bvAndLemmas = IdentityHashMap<KExpr<*>, Bv2IntLemma>()
     private val powerOfTwoMaxArg = Object2IntOpenHashMap<KExpr<*>>().apply {
         defaultReturnValue(-1)
     }
@@ -226,18 +226,17 @@ class KBv2IntRewriter(
             )
         }
 
-        val lemma = transformedExpr.getLemma()
+        val lemma = ctx.mkAndNoSimplify(transformedExpr.getLemma().flatten())
 
         mkAndNoSimplify(transformedExpr, lemma)
             .addBvAndLemma(transformedExpr.getBvAndLemma())
             .addOverflowLemma(transformedExpr.getOverflowLemma())
     }
 
-    fun bvAndLemmas(expr: KExpr<KBoolSort>): List<KExpr<KBoolSort>> {
-        return LemmaFlatter.flatLemma(expr.getBvAndLemma())
-    }
+    fun bvAndLemmas(expr: KExpr<KBoolSort>): List<KExpr<KBoolSort>> = expr.getBvAndLemma().flatten()
 
-    fun overflowLemmas(expr: KExpr<KBoolSort>): KExpr<KBoolSort> = expr.getOverflowLemma()
+    fun overflowLemmas(expr: KExpr<KBoolSort>): KExpr<KBoolSort> =
+        ctx.mkAndNoSimplify(expr.getOverflowLemma().flatten())
 
     fun rewriteDecl(decl: KDecl<*>): KDecl<KSort> = with(ctx) {
         mkFuncDecl(
@@ -255,38 +254,47 @@ class KBv2IntRewriter(
         powerOfTwoMaxArg[tryUnwrap()] = max(getPowerOfTwoMaxArg(), value)
     }
 
-    private fun <T : KSort> KExpr<T>.addLemma(lemma: KExpr<KBoolSort>): KExpr<T> = apply {
-        if (lemma == ctx.trueExpr) return@apply
+    private fun <T : KSort> KExpr<T>.addLemma(lemma: KExpr<KBoolSort>): KExpr<T> =
+        addLemma(Bv2IntLemma.fromExpr(lemma))
 
-        lemmas[tryUnwrap()] = ctx.mkAndNoSimplify(getLemma(), lemma)
+    private fun <T : KSort> KExpr<T>.addLemma(lemma: Bv2IntLemma): KExpr<T> = apply {
+        if (lemma.isEmpty) return@apply
+        val mergedLemma = lemma.merge(getLemma())
+        lemmas[tryUnwrap()] = mergedLemma
     }
 
-    private fun <T : KSort> KExpr<T>.addBvAndLemma(lemma: KExpr<KBoolSort>): KExpr<T> = apply {
-        if (lemma == ctx.trueExpr || rewriteMode != RewriteMode.LAZY) return@apply
+    private fun <T : KSort> KExpr<T>.addBvAndLemma(lemma: KExpr<KBoolSort>): KExpr<T> =
+        addBvAndLemma(Bv2IntLemma.fromExpr(lemma))
 
-        bvAndLemmas[tryUnwrap()] = ctx.mkAndNoSimplify(getBvAndLemma(), lemma)
+    private fun <T : KSort> KExpr<T>.addBvAndLemma(lemma: Bv2IntLemma): KExpr<T> = apply {
+        if (lemma.isEmpty || rewriteMode != RewriteMode.LAZY) return@apply
+        val mergedLemma = lemma.merge(getBvAndLemma())
+        bvAndLemmas[tryUnwrap()] = mergedLemma
     }
 
-    private fun <T : KSort> KExpr<T>.addOverflowLemma(lemma: KExpr<KBoolSort>): KExpr<T> = apply {
-        if (lemma == ctx.trueExpr || !isLazyOverflow) return@apply
+    private fun <T : KSort> KExpr<T>.addOverflowLemma(lemma: KExpr<KBoolSort>): KExpr<T> =
+        addOverflowLemma(Bv2IntLemma.fromExpr(lemma))
 
-        overflowLemmas[tryUnwrap()] = ctx.mkAndNoSimplify(getOverflowLemma(), lemma)
+    private fun <T : KSort> KExpr<T>.addOverflowLemma(lemma: Bv2IntLemma): KExpr<T> = apply {
+        if (lemma.isEmpty || !isLazyOverflow) return@apply
+        val mergedLemma = lemma.merge(getOverflowLemma())
+        overflowLemmas[tryUnwrap()] = mergedLemma
     }
 
-    private fun KExpr<*>.getLemma() = lemmas.getOrDefault(tryUnwrap(), ctx.trueExpr)
+    private fun KExpr<*>.getLemma() = lemmas.getOrDefault(tryUnwrap(), Bv2IntLemma.EMPTY)
 
     private fun KExpr<*>.getBvAndLemma() =
         if (rewriteMode == RewriteMode.LAZY) {
-            bvAndLemmas.getOrDefault(tryUnwrap(), ctx.trueExpr)
+            bvAndLemmas.getOrDefault(tryUnwrap(), Bv2IntLemma.EMPTY)
         } else {
-            ctx.trueExpr
+            Bv2IntLemma.EMPTY
         }
 
     private fun KExpr<*>.getOverflowLemma() =
         if (isLazyOverflow) {
-            overflowLemmas.getOrDefault(tryUnwrap(), ctx.trueExpr)
+            overflowLemmas.getOrDefault(tryUnwrap(), Bv2IntLemma.EMPTY)
         } else {
-            ctx.trueExpr
+            Bv2IntLemma.EMPTY
         }
 
 
@@ -2173,18 +2181,32 @@ class KBv2IntRewriter(
     }
 
     private fun <T : KSort> KExpr<T>.distributeDependencies(arg0: KExpr<*>, arg1: KExpr<*>): KExpr<T> = apply {
-        addLemma(ctx.mkAnd(arg0.getLemma(), arg1.getLemma(), flat = false, order = false))
-        addBvAndLemma(ctx.mkAnd(arg0.getBvAndLemma(), arg1.getBvAndLemma(), flat = false, order = false))
-        addOverflowLemma(ctx.mkAnd(arg0.getOverflowLemma(), arg1.getOverflowLemma(), flat = false, order = false))
+        addLemma(Bv2IntLemma.from(arg0.getLemma(), arg1.getLemma()))
+        addBvAndLemma(Bv2IntLemma.from(arg0.getBvAndLemma(), arg1.getBvAndLemma()))
+        addOverflowLemma(Bv2IntLemma.from(arg0.getOverflowLemma(), arg1.getOverflowLemma()))
         updatePowerOfTwoMaxArg(max(arg0.getPowerOfTwoMaxArg(), arg1.getPowerOfTwoMaxArg()))
+    }
+
+    private fun <T : KSort> KExpr<T>.distributeDependencies(
+        arg0: KExpr<*>,
+        arg1: KExpr<*>,
+        arg2: KExpr<*>
+    ): KExpr<T> = apply {
+        addLemma(Bv2IntLemma.from(arg0.getLemma(), arg1.getLemma(), arg2.getLemma()))
+        addBvAndLemma(Bv2IntLemma.from(arg0.getBvAndLemma(), arg1.getBvAndLemma(), arg2.getBvAndLemma()))
+        addOverflowLemma(Bv2IntLemma.from(arg0.getOverflowLemma(), arg1.getOverflowLemma(), arg2.getOverflowLemma()))
+        updatePowerOfTwoMaxArg(max(
+            arg0.getPowerOfTwoMaxArg(),
+            max(arg1.getPowerOfTwoMaxArg(), arg2.getPowerOfTwoMaxArg())
+        ))
     }
 
     private fun <T : KSort> KExpr<T>.distributeDependencies(args: List<KExpr<*>>): KExpr<T> = apply {
         if (args.isEmpty()) return this
 
-        addLemma(ctx.mkAnd(args.map { it.getLemma() }, flat = false, order = false))
-        addBvAndLemma(ctx.mkAnd(args.map { it.getBvAndLemma() }, flat = false, order = false))
-        addOverflowLemma(ctx.mkAnd(args.map { it.getOverflowLemma() }, flat = false, order = false))
+        addLemma(Bv2IntLemma.fromListMap(args) { it.getLemma() })
+        addBvAndLemma(Bv2IntLemma.fromListMap(args) { it.getBvAndLemma() })
+        addOverflowLemma(Bv2IntLemma.fromListMap(args) { it.getOverflowLemma() })
 
         updatePowerOfTwoMaxArg(args.maxOf { it.getPowerOfTwoMaxArg() })
     }
@@ -2201,7 +2223,7 @@ class KBv2IntRewriter(
 
 //        val signedness = if (expr.isNormalizedUnsigned) Signedness.UNSIGNED else Signedness.SIGNED
 
-        listOf(Signedness.UNSIGNED, Signedness.SIGNED).forEach { signedness ->
+        sequenceOf(Signedness.UNSIGNED, Signedness.SIGNED).forEach { signedness ->
             val normalizedValue = (expr as KBv2IntAuxExpr).normalized(signedness)
             val (lowerBound, upperBound) = getBounds(sort.sizeBits, signedness)
             val lemma = (normalizedValue ge lowerBound) and (normalizedValue le upperBound)
@@ -2272,7 +2294,7 @@ class KBv2IntRewriter(
             arg0.preprocessArg(preprocessMode).uncheckedCast(),
             arg1.preprocessArg(preprocessMode).uncheckedCast(),
             arg2.preprocessArg(preprocessMode).uncheckedCast()
-        ).distributeDependencies(listOf(arg0, arg1, arg2))
+        ).distributeDependencies(arg0, arg1, arg2)
             .postRewriteResult(postRewriteMode, expr.sort)
             .addForOverflowCheck(expr.sort, checkOverflow)
             .uncheckedCast()
@@ -2771,14 +2793,16 @@ class KBv2IntRewriter(
         inline fun distributeLemmas(
             constructor: (KExpr<KBoolSort>, List<KDecl<*>>) -> KExpr<KBoolSort>
         ): KExpr<KBoolSort> {
-            val lemma = apply(body.getLemma())
-            val bvAndLemma = apply(body.getBvAndLemma())
-            val overflowLemma = apply(body.getOverflowLemma())
+//            val lemma = apply(body.getLemma())
+//            val bvAndLemma = apply(body.getBvAndLemma())
+//            val overflowLemma = apply(body.getOverflowLemma())
+//
+//            return constructor(newBody, bounds)
+//                .addLemma(lemma)
+//                .addBvAndLemma(bvAndLemma)
+//                .addOverflowLemma(overflowLemma)
 
-            return constructor(newBody, bounds)
-                .addLemma(lemma)
-                .addBvAndLemma(bvAndLemma)
-                .addOverflowLemma(overflowLemma)
+            TODO("fix")
         }
 
         override fun <T : KSort> exprTransformationRequired(expr: KExpr<T>): Boolean {

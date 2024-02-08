@@ -241,6 +241,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         currentAssertedExprs.clear()
         currentAssumptions.clear()
         originalAssumptions = listOf()
+//        splitter.dsu.clear()
 
         solver.pop(n)
     }
