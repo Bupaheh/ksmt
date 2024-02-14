@@ -67,4 +67,8 @@ class KBv2IntModel(
 
         return KModelImpl(ctx, interpretations, uninterpretedSortsUniverses)
     }
+
+    override fun close() {
+        model.close()
+    }
 }
