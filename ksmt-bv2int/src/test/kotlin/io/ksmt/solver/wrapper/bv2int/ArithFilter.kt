@@ -58,6 +58,7 @@ import io.ksmt.sort.KSort
 
 class ArithFilter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
     private var hasArith = false
+    private var hasShift = false
 
     fun <T : KSort> filter(expr: KExpr<T>): Boolean {
         apply(expr)
@@ -212,6 +213,7 @@ class ArithFilter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
 
     override fun <T : KBvSort> transform(expr: KBvLogicalShiftRightExpr<T>): KExpr<T> {
         hasArith = true
+        hasShift = true
         return super.transform(expr)
     }
 

@@ -249,7 +249,7 @@ class KBv2IntRewriter(
     private fun KExpr<*>.getPowerOfTwoMaxArg() = powerOfTwoMaxArg.getInt(tryUnwrap())
 
     private fun <T : KSort> KExpr<T>.updatePowerOfTwoMaxArg(value: Int): KExpr<T> = apply {
-        if (value == -1) return@apply
+        if (value == -1 || this is KInterpretedValue) return@apply
 
         powerOfTwoMaxArg[tryUnwrap()] = max(getPowerOfTwoMaxArg(), value)
     }
@@ -258,7 +258,7 @@ class KBv2IntRewriter(
         addLemma(Bv2IntLemma.fromExpr(lemma))
 
     private fun <T : KSort> KExpr<T>.addLemma(lemma: Bv2IntLemma): KExpr<T> = apply {
-        if (lemma.isEmpty) return@apply
+        if (lemma.isEmpty || this is KInterpretedValue) return@apply
         val mergedLemma = lemma.merge(getLemma())
         lemmas[tryUnwrap()] = mergedLemma
     }
@@ -267,7 +267,7 @@ class KBv2IntRewriter(
         addBvAndLemma(Bv2IntLemma.fromExpr(lemma))
 
     private fun <T : KSort> KExpr<T>.addBvAndLemma(lemma: Bv2IntLemma): KExpr<T> = apply {
-        if (lemma.isEmpty || rewriteMode != RewriteMode.LAZY) return@apply
+        if (lemma.isEmpty || rewriteMode != RewriteMode.LAZY || this is KInterpretedValue) return@apply
         val mergedLemma = lemma.merge(getBvAndLemma())
         bvAndLemmas[tryUnwrap()] = mergedLemma
     }
@@ -276,7 +276,7 @@ class KBv2IntRewriter(
         addOverflowLemma(Bv2IntLemma.fromExpr(lemma))
 
     private fun <T : KSort> KExpr<T>.addOverflowLemma(lemma: Bv2IntLemma): KExpr<T> = apply {
-        if (lemma.isEmpty || !isLazyOverflow) return@apply
+        if (lemma.isEmpty || !isLazyOverflow || this is KInterpretedValue) return@apply
         val mergedLemma = lemma.merge(getOverflowLemma())
         overflowLemmas[tryUnwrap()] = mergedLemma
     }
@@ -1473,15 +1473,24 @@ class KBv2IntRewriter(
             )
 
             when {
-                shiftRewriteCondition(shift, sizeBits) ->
-                    KBv2IntAuxExprLshr(
-                        normalized = result,
-                        originalExpr = arg,
-                        shift = normalizedShift.uncheckedCast<_, KIntNumExpr>().bigIntegerValue.toLong(),
-                        sizeBits = sizeBits
-                    )
+                shiftRewriteCondition(shift, sizeBits) -> {
+                    val shiftNum = (normalizedShift as KIntNumExpr).bigIntegerValue.toLong().toUInt()
+
+                    if (arg is KBv2IntAuxExprZeroExtension && sizeBits - shiftNum <= arg.extensionSize) {
+                        KBv2IntAuxExprConst(bv2IntContext.zero, sizeBits, Signedness.UNSIGNED)
+                    } else {
+                        KBv2IntAuxExprLshr(
+                            normalized = result,
+                            originalExpr = arg,
+                            shift = normalizedShift.uncheckedCast<_, KIntNumExpr>().bigIntegerValue.toLong(),
+                            sizeBits = sizeBits
+                        )
+                    }
+                }
 
                 else -> result.updatePowerOfTwoMaxArg(sizeBits.toInt() - 1)
+            }.also {
+                val t = 9
             }
         }
     }
@@ -2535,7 +2544,7 @@ class KBv2IntRewriter(
     private inner class KBv2IntAuxExprZeroExtension(
         private val normalized: KExpr<KIntSort>,
         sizeBits: UInt,
-        private val extensionSize: UInt,
+        val extensionSize: UInt,
     ) : KBv2IntAuxExpr(normalized.ctx, sizeBits) {
         override val denormalized: KExpr<KIntSort> = normalized
         override val isNormalizedSigned: Boolean = true
@@ -2849,7 +2858,7 @@ class KBv2IntRewriter(
             bv2IntContext.zero
         }
 
-        return Pair(lowerBound + diff, upperBound + diff)
+        return lowerBound + diff to upperBound + diff
     }
 
     private fun KContext.toSignedness(

@@ -3,6 +3,7 @@ package io.ksmt.solver.wrapper.bv2int
 import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
+import com.jetbrains.rd.util.string.printToString
 import io.ksmt.KContext
 import io.ksmt.expr.KApp
 import io.ksmt.expr.KBvAndExpr
@@ -136,13 +137,14 @@ fun KContext.readSerializedFormulas(dir: File, begin: Int, end: Int): List<Pair<
 }
 
 fun KContext.readSerializedFormulasUsvm(dir: File, begin: Int, end: Int): List<Pair<String, List<KExpr<KBoolSort>>>> {
-
     val files = dir.listFiles()?.filter { !it.isDirectory } ?: error("empty folder")
     val expressions: MutableList<Pair<String, List<KExpr<KBoolSort>>>> = mutableListOf()
 
     files
 //        .shuffled(Random(1))
         .sortedBy { it.path.substringAfterLast("/").toInt() }
+        .drop(begin)
+        .take(end - begin + 1)
         .forEach { file ->
             val srcSerializationCtx = AstSerializationCtx().apply { initCtx(this@readSerializedFormulasUsvm) }
             val srcMarshaller = AstSerializationCtx.marshaller(srcSerializationCtx)
@@ -163,7 +165,7 @@ fun KContext.readSerializedFormulasUsvm(dir: File, begin: Int, end: Int): List<P
             expressions.add(normalizedPath to currentExpressions)
         }
 
-    return expressions.map { it.first to it.second.drop(begin).take(end - begin + 1) }
+    return expressions.map { it.first to it.second }
 }
 
 inline fun KContext.readFormulas(
@@ -223,10 +225,12 @@ private fun KContext.measureAssertTime(
             solver.assert(expr)
             status = solver.check(timeout)
 
-//            if (status == KSolverStatus.SAT) { solver.model() }
+            if (status == KSolverStatus.SAT) {
+                val model = solver.model()
+                model.close()
+            }
         }
     } catch (e: Throwable) {
-        throw e
         println(e.message)
 //        solver.close()
         return MeasureAssertTimeResult(timeout.inWholeNanoseconds, timeout.inWholeNanoseconds, KSolverStatus.UNKNOWN, -2)
@@ -300,7 +304,7 @@ private fun KContext.runBenchmarkUsvm(
     }
 }
 
-val innerSolver = SolverConfiguration.InnerSolver.Yices
+val innerSolver = SolverConfiguration.InnerSolver.Z3
 val rewriteMode = RewriteMode.EAGER
 val andRewriteMode = AndRewriteMode.SUM
 val signednessMode = SignednessMode.SIGNED
@@ -308,14 +312,14 @@ val unsignedMode: SignednessMode? = null
 
 class KBv2IntCustomSolver(
     ctx: KContext,
-) : KBv2IntSolver<KYicesSolverConfiguration>(
+) : KBv2IntSolver<KZ3SolverConfiguration>(
     ctx,
-    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
+    KBenchmarkSolverWrapper(ctx, KZ3Solver(ctx)),
     rewriteMode,
     andRewriteMode,
     signednessMode,
     unsatSignednessMode = unsignedMode,
-    isSplitterOn = true,
+    isSplitterOn = false,
     round1Result = false
 ) {
     init {
@@ -329,7 +333,7 @@ class KBv2IntCustomSolver(
 fun main() {
     val ctx = KContext()
     val timeout = 1.seconds
-    val expressionsFileName = "usvm-owasp"
+    val expressionsFileName = "usvm-owasp2"
     val solvers = listOf(
 //        SolverConfiguration(ctx, innerSolver),
         SolverConfiguration(ctx, innerSolver, rewriteMode, andRewriteMode, signednessMode, unsignedMode),
@@ -339,15 +343,19 @@ fun main() {
     val expressions = ctx.readSerializedFormulasUsvm(
         File("generatedExpressions/$expressionsFileName"),
         0,
-        10000
+        1000
     )
         .map { (id, l) ->
-            id to l.filterNot { expr -> TempVisitor(ctx).visit(expr) }.take(400).drop(6)
+            id to l
+                .filter { TempVisitor(ctx).visit(it) }
 //                .filter { ArithFilter(ctx).filter(it) }
         }
-        .drop(1)
-//        .filter { it.first == "5" }
-//        .map { (id, l) -> id to l.take(35023) }
+//        .take(10)
+//        .map { (id, l) ->
+//            val list = if (id != "10") l else l.take(2)
+//            id to list
+//        }
+
 
 
 //    val expressions = ctx.readFormulas(
@@ -369,10 +377,17 @@ fun main() {
 //    }
 //    return
 
+//    val expr = expressions.last().second[1]
+//
+//    println(KDeclCounter(ctx).countDeclarations(expr).toList().joinToString(separator = "\n"))
+//    return
+
+
+//    return println(expressions.map { it.second.size }.foldRight(0) { kek, acc -> kek + acc })
     for (solver in solvers) {
         ctx.runBenchmarkUsvm(
-//            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT-woM.csv"),
-            outputFile = File("benchmarkResults/trash.csv"),
+            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT.csv"),
+//            outputFile = File("benchmarkResults/trash.csv"),
             solverConfiguration = solver,
             expressions = expressions,
             timeout
