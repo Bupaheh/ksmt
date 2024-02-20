@@ -2,140 +2,90 @@ package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.expr.KExpr
 import io.ksmt.sort.KBoolSort
+import io.ksmt.utils.uncheckedCast
 
-@JvmInline
-value class Bv2IntLemma internal constructor(private val value: Any) {
-    val isLeaf: Boolean
-        get() = value is KExpr<*>
+typealias Bv2IntLemma = Any
 
-    val isEmpty: Boolean
-        get() = value === empty
+val EMPTY_LEMMA = Any()
 
-    val isParentPair: Boolean
-        get() = value is Pair<*, *>
+fun isEmptyLemma(lemma: Bv2IntLemma) = lemma === EMPTY_LEMMA
 
-    val isParentTriple: Boolean
-        get() = value is Triple<*, *, *>
-
-    val isParentList: Boolean
-        get() = value is List<*>
-
-    @Suppress("UNCHECKED_CAST")
-    val getChildrenPair: Pair<Bv2IntLemma, Bv2IntLemma>
-        get() = value as Pair<Bv2IntLemma, Bv2IntLemma>
-
-    @Suppress("UNCHECKED_CAST")
-    val getChildrenTriple: Triple<Bv2IntLemma, Bv2IntLemma, Bv2IntLemma>
-        get() = value as Triple<Bv2IntLemma, Bv2IntLemma, Bv2IntLemma>
-
-    @Suppress("UNCHECKED_CAST")
-    val getChildrenList: List<Bv2IntLemma>
-        get() = value as List<Bv2IntLemma>
-
-    @Suppress("UNCHECKED_CAST")
-    val getExpr: KExpr<KBoolSort>
-        get() = value as KExpr<KBoolSort>
-
-    fun merge(other: Bv2IntLemma): Bv2IntLemma {
-        if (isEmpty) return other
-        if (other.isEmpty) return this
-
-        return Bv2IntLemma(this to other)
+fun toLemma(expr: KExpr<KBoolSort>): Bv2IntLemma =
+    if (expr == expr.ctx.trueExpr) {
+        EMPTY_LEMMA
+    } else {
+        expr
     }
 
-    companion object {
-        private val empty = Any()
+fun mergeLemmas(arg0: Bv2IntLemma, arg1: Bv2IntLemma): Bv2IntLemma =
+    when {
+        isEmptyLemma(arg0) -> arg1
+        isEmptyLemma(arg1) -> arg0
+        else -> arg0 to arg1
+    }
 
-        val EMPTY = Bv2IntLemma(empty)
+fun mergeLemmas(arg0: Bv2IntLemma, arg1: Bv2IntLemma, arg2: Bv2IntLemma): Bv2IntLemma =
+    when {
+        isEmptyLemma(arg0) -> mergeLemmas(arg1, arg2)
+        isEmptyLemma(arg1) -> mergeLemmas(arg0, arg2)
+        isEmptyLemma(arg2) -> mergeLemmas(arg0, arg1)
+        else -> Triple(arg0, arg1, arg2)
+    }
 
-        @JvmStatic
-        fun fromExpr(expr: KExpr<KBoolSort>): Bv2IntLemma {
-            if (expr == expr.ctx.trueExpr) return EMPTY
+inline fun mergeLemmas(list: List<KExpr<*>>, transform: (KExpr<*>) -> Bv2IntLemma): Bv2IntLemma {
+    var size = 0
+    var first = EMPTY_LEMMA
+    var second = EMPTY_LEMMA
+    var third = EMPTY_LEMMA
+    var lemmas: MutableList<Bv2IntLemma>? = null
 
-            return Bv2IntLemma(expr)
+    list.forEach {
+        val lemma = transform(it)
+        if (isEmptyLemma(lemma)) return@forEach
+
+        size++
+
+        when (size) {
+            1 -> first = lemma
+            2 -> second = lemma
+            3 -> third = lemma
+            4 -> lemmas = mutableListOf(first, second, third, lemma)
+            else -> lemmas!!.add(lemma)
         }
+    }
 
-        @JvmStatic
-        fun from(l0: Bv2IntLemma, arg1: Bv2IntLemma): Bv2IntLemma = l0.merge(arg1)
-
-        @JvmStatic
-        fun from(arg0: Bv2IntLemma, arg1: Bv2IntLemma, arg2: Bv2IntLemma): Bv2IntLemma {
-            when {
-                arg0.isEmpty -> return arg1.merge(arg2)
-                arg1.isEmpty -> return arg0.merge(arg2)
-                arg2.isEmpty -> return arg0.merge(arg1)
-            }
-
-            return Bv2IntLemma(Triple(arg0, arg1, arg2))
-        }
-
-        @JvmStatic
-        fun fromList(lemmas: List<Bv2IntLemma>): Bv2IntLemma {
-//            if (lemmas.all { it.isEmpty }) return EMPTY
-
-            return Bv2IntLemma(lemmas)
-        }
-
-        @JvmStatic
-        inline fun fromListMap(list: List<KExpr<*>>, transform: (KExpr<*>) -> Bv2IntLemma): Bv2IntLemma {
-            var size = 0
-            var first = EMPTY
-            var second = EMPTY
-            var third = EMPTY
-            var lemmas: MutableList<Bv2IntLemma>? = null
-
-            list.forEach {
-                val lemma = transform(it)
-                if (lemma.isEmpty) return@forEach
-
-                size++
-
-                when (size) {
-                    1 -> first = lemma
-                    2 -> second = lemma
-                    3 -> third = lemma
-                    4 -> lemmas = mutableListOf(first, second, third, lemma)
-                    else -> lemmas!!.add(lemma)
-                }
-            }
-
-            return when (size) {
-                0 -> EMPTY
-                1 -> first
-                2 -> from(first, second)
-                3 -> from(first, second, third)
-                else -> fromList(lemmas!!)
-            }
-        }
+    return when (size) {
+        0 -> EMPTY_LEMMA
+        1 -> first
+        2 -> first to second
+        3 -> Triple(first, second, third)
+        else -> lemmas!!
     }
 }
 
-fun Bv2IntLemma.flatten(): List<KExpr<KBoolSort>> {
-    val lemmas: MutableList<KExpr<KBoolSort>> = mutableListOf()
+fun lemmaFlatten(root: Bv2IntLemma): List<KExpr<KBoolSort>> {
+    val lemmas: MutableList<KExpr<*>> = mutableListOf()
     val stack = ArrayList<Bv2IntLemma>()
 
-    stack.add(this)
+    stack.add(root)
 
     while (stack.isNotEmpty()) {
-        val e = stack.removeLast()
+        when (val lemma = stack.removeLast()) {
+            is KExpr<*> -> lemmas.add(lemma)
+            is Pair<*, *> -> {
+                stack.add(lemma.first.uncheckedCast())
+                stack.add(lemma.second.uncheckedCast())
+            }
 
-        when {
-            e.isEmpty -> continue
-            e.isLeaf -> lemmas.add(e.getExpr)
-            e.isParentPair -> {
-                val (n1, n2) = e.getChildrenPair
-                stack.add(n1)
-                stack.add(n2)
+            is Triple<*, *, *> -> {
+                stack.add(lemma.first.uncheckedCast())
+                stack.add(lemma.second.uncheckedCast())
+                stack.add(lemma.third.uncheckedCast())
             }
-            e.isParentTriple -> {
-                val (n1, n2, n3) = e.getChildrenTriple
-                stack.add(n1)
-                stack.add(n2)
-                stack.add(n3)
-            }
-            e.isParentList -> stack.addAll(e.getChildrenList)
+
+            is List<*> -> stack.addAll(lemma.uncheckedCast())
         }
     }
 
-    return lemmas
+    return lemmas.uncheckedCast()
 }

@@ -35,6 +35,13 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         }
     }
 
+    private val isLazyOverflow: Boolean
+        get() = signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW ||
+            signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS
+
+    private val isLazyBvAnd
+        get() = rewriteMode == RewriteMode.LAZY
+
     private var currentScope: UInt = 0u
     private var lastCheckStatus = KSolverStatus.UNKNOWN
 
@@ -67,16 +74,18 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
         currentAssertedExprs.add(rewritten)
 
-        if (signednessMode != SignednessMode.UNSIGNED && signednessMode != SignednessMode.SIGNED) {
+        if (isLazyOverflow) {
             currentOverflowLemmas.add(currentRewriter.overflowLemmas(rewritten))
             originalExpressions.add(expr)
         }
 
-        solver.assert(rewritten)
-
-        if (rewriteMode == RewriteMode.LAZY) {
+        if (isLazyBvAnd) {
             currentBvAndLemmas.addAll(currentRewriter.bvAndLemmas(rewritten))
         }
+
+
+
+        solver.assert(rewritten)
     }
 
     override fun assert(exprs: List<KExpr<KBoolSort>>) {
