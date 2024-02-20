@@ -304,7 +304,7 @@ private fun KContext.runBenchmarkUsvm(
     }
 }
 
-val innerSolver = SolverConfiguration.InnerSolver.Z3
+val innerSolver = SolverConfiguration.InnerSolver.Yices
 val rewriteMode = RewriteMode.EAGER
 val andRewriteMode = AndRewriteMode.SUM
 val signednessMode = SignednessMode.SIGNED
@@ -312,9 +312,9 @@ val unsignedMode: SignednessMode? = null
 
 class KBv2IntCustomSolver(
     ctx: KContext,
-) : KBv2IntSolver<KZ3SolverConfiguration>(
+) : KBv2IntSolver<KYicesSolverConfiguration>(
     ctx,
-    KBenchmarkSolverWrapper(ctx, KZ3Solver(ctx)),
+    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
     rewriteMode,
     andRewriteMode,
     signednessMode,
@@ -333,7 +333,7 @@ class KBv2IntCustomSolver(
 fun main() {
     val ctx = KContext()
     val timeout = 1.seconds
-    val expressionsFileName = "usvm-owasp2"
+    val expressionsFileName = "usvm-exprs3"
     val solvers = listOf(
 //        SolverConfiguration(ctx, innerSolver),
         SolverConfiguration(ctx, innerSolver, rewriteMode, andRewriteMode, signednessMode, unsignedMode),
@@ -343,7 +343,7 @@ fun main() {
     val expressions = ctx.readSerializedFormulasUsvm(
         File("generatedExpressions/$expressionsFileName"),
         0,
-        1000
+        2000000000
     )
         .map { (id, l) ->
             id to l
@@ -386,8 +386,8 @@ fun main() {
 //    return println(expressions.map { it.second.size }.foldRight(0) { kek, acc -> kek + acc })
     for (solver in solvers) {
         ctx.runBenchmarkUsvm(
-            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT.csv"),
-//            outputFile = File("benchmarkResults/trash.csv"),
+//            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT-test.csv"),
+            outputFile = File("benchmarkResults/trash.csv"),
             solverConfiguration = solver,
             expressions = expressions,
             timeout
