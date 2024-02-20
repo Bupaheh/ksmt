@@ -15,10 +15,9 @@ import kotlin.time.Duration.Companion.seconds
 class SolverConfiguration(
     private val ctx: KContext,
     private val solver: InnerSolver,
-    private val rewriteMode: KBv2IntRewriter.RewriteMode? = null,
-    private val andRewriteMode: KBv2IntRewriter.AndRewriteMode = KBv2IntRewriter.AndRewriteMode.SUM,
-    private val signednessMode: KBv2IntRewriter.SignednessMode = KBv2IntRewriter.SignednessMode.UNSIGNED,
-    private val unsignedMode: KBv2IntRewriter.SignednessMode? = KBv2IntRewriter.SignednessMode.UNSIGNED,
+    private val rewriterConfig: KBv2IntRewriterConfig = KBv2IntRewriterConfig(),
+    private val equisatisfiableConfig: KBv2IntRewriterConfig = KBv2IntRewriterConfig(disableRewriting = true),
+    private val isOriginalSolver: Boolean = false,
 ) {
     enum class InnerSolver {
         Z3,
@@ -52,7 +51,7 @@ class SolverConfiguration(
     private lateinit var constructedSolver: KSolver<*>
 
     fun initSolver() {
-        constructedSolver = if (rewriteMode == null) {
+        constructedSolver = if (isOriginalSolver) {
             solver.construct(ctx)
         } else {
             KBv2IntCustomSolver(ctx)
@@ -67,7 +66,7 @@ class SolverConfiguration(
         return@with constructedSolver
 
 
-        val result = if (rewriteMode == null) {
+        val result = if (isOriginalSolver) {
             solver.construct(ctx)
         } else {
 //            return@with
@@ -80,36 +79,37 @@ class SolverConfiguration(
 
     override fun toString(): String {
         val innerSolver = solver.toString()
-        if (rewriteMode == null) return innerSolver
+        if (isOriginalSolver) return innerSolver + "-oneMore"
 
-        val prefix = when (rewriteMode) {
+        val prefix = when (rewriterConfig.rewriteMode) {
             KBv2IntRewriter.RewriteMode.EAGER -> "Eager-"
             KBv2IntRewriter.RewriteMode.LAZY -> "Lazy-"
         }
 
-        var suffix =  when (andRewriteMode) {
+        var suffix =  when (rewriterConfig.andRewriteMode) {
             KBv2IntRewriter.AndRewriteMode.SUM -> "-Sum"
             KBv2IntRewriter.AndRewriteMode.BITWISE -> "-Bitwise"
         }
 
-        suffix += when (signednessMode) {
+        suffix += when (rewriterConfig.signednessMode) {
             KBv2IntRewriter.SignednessMode.UNSIGNED -> ""
             KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflow"
             KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
             KBv2IntRewriter.SignednessMode.SIGNED -> "-Signed"
         }
 
-        if (signednessMode == KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW) {
-            suffix += when (unsignedMode) {
-                KBv2IntRewriter.SignednessMode.UNSIGNED -> ""
-                KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflow"
-                KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
-                KBv2IntRewriter.SignednessMode.SIGNED -> "-Signed"
-                null -> "-OriginalUnsat"
+        if (rewriterConfig.signednessMode == KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW) {
+            suffix += when {
+                equisatisfiableConfig.disableRewriting -> "-OriginalUnsat"
+                equisatisfiableConfig.signednessMode == KBv2IntRewriter.SignednessMode.UNSIGNED -> ""
+                equisatisfiableConfig.signednessMode == KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW -> "-SignedLazyOverflow"
+                equisatisfiableConfig.signednessMode == KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS -> "-SignedLazyOverflowNoBounds"
+                equisatisfiableConfig.signednessMode == KBv2IntRewriter.SignednessMode.SIGNED -> "-Signed"
+                else -> error("Unexpected")
             }
         }
 
-        return prefix + innerSolver + suffix
+        return prefix + innerSolver + suffix + "-second"
     }
 
     companion object {

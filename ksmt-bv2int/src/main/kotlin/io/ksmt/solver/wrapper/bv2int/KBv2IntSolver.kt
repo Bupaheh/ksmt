@@ -13,34 +13,22 @@ import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.RewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.AndRewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode
 import java.util.Date
-import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 open class KBv2IntSolver<Config: KSolverConfiguration>(
     private val ctx: KContext,
     private val solver: KSolver<Config>,
-    private val rewriteMode: RewriteMode = RewriteMode.EAGER,
-    private val andRewriteMode: AndRewriteMode = AndRewriteMode.SUM,
-    private val signednessMode: SignednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW,
-    private val unsatSignednessMode: SignednessMode? = SignednessMode.SIGNED,
-    private val round1Result: Boolean = false,
-    private val isSplitterOn: Boolean = false
+    private val rewriterConfig: KBv2IntRewriterConfig,
+    private val equisatisfiableRewriterConfig: KBv2IntRewriterConfig = KBv2IntRewriterConfig(disableRewriting = true),
 ) : KSolver<Config> by solver {
     init {
         require(ctx.simplificationMode == KContext.SimplificationMode.SIMPLIFY)
 
-        if (signednessMode != SignednessMode.UNSIGNED) {
+        if (!rewriterConfig.isLazyOverflow) {
             solver.push()
         }
     }
-
-    private val isLazyOverflow: Boolean
-        get() = signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW ||
-            signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS
-
-    private val isLazyBvAnd
-        get() = rewriteMode == RewriteMode.LAZY
 
     private var currentScope: UInt = 0u
     private var lastCheckStatus = KSolverStatus.UNKNOWN
@@ -53,9 +41,9 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
     private val bv2IntContext = KBv2IntContext(ctx)
     private val splitter = KBv2IntSplitter(ctx)
-    private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, signednessMode, splitter.dsu, isSplitterOn)
+    private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, splitter.dsu, rewriterConfig, )
     private val unsatRewriter by lazy {
-        KBv2IntRewriter(ctx, bv2IntContext, rewriteMode, andRewriteMode, unsatSignednessMode!!, splitter.dsu, isSplitterOn)
+        KBv2IntRewriter(ctx, bv2IntContext, splitter.dsu, equisatisfiableRewriterConfig)
     }
 
     private var currentBvAndLemmas = mutableListOf<KExpr<KBoolSort>>()
@@ -68,24 +56,23 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private var roundCnt = 0
 
     override fun assert(expr: KExpr<KBoolSort>) {
-        if (isSplitterOn) splitter.apply(expr)
+        if (rewriterConfig.enableSplitter) splitter.apply(expr)
 
         val rewritten = currentRewriter.rewriteBv2Int(expr)
+        solver.assert(rewritten)
+
+        if (rewriterConfig.isEquisatisfiable) return
 
         currentAssertedExprs.add(rewritten)
 
-        if (isLazyOverflow) {
+        if (rewriterConfig.isLazyOverflow) {
             currentOverflowLemmas.add(currentRewriter.overflowLemmas(rewritten))
             originalExpressions.add(expr)
         }
 
-        if (isLazyBvAnd) {
+        if (rewriterConfig.isLazyOverflow) {
             currentBvAndLemmas.addAll(currentRewriter.bvAndLemmas(rewritten))
         }
-
-
-
-        solver.assert(rewritten)
     }
 
     override fun assert(exprs: List<KExpr<KBoolSort>>) {
@@ -119,17 +106,11 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private fun innerCheck(timeout: Duration): KSolverStatus {
         if (timeout.isNegative()) return KSolverStatus.UNKNOWN
 
-        val status: KSolverStatus
-
-        measureNanoTime {
-            status = if (currentAssumptions.isEmpty()) {
-                solver.check(timeout)
-            } else {
-                solver.checkWithAssumptions(currentAssumptions, timeout)
-            }
+        return if (currentAssumptions.isEmpty()) {
+            solver.check(timeout)
+        } else {
+            solver.checkWithAssumptions(currentAssumptions, timeout)
         }
-
-        return status
     }
 
     @Suppress("ComplexCondition")
@@ -137,11 +118,9 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         val start = Date()
         val status = innerCheck(timeout)
 
-        if (signednessMode == SignednessMode.UNSIGNED ||
-            signednessMode == SignednessMode.SIGNED ||
+        if (!rewriterConfig.isLazyOverflow ||
             status == KSolverStatus.UNKNOWN ||
             isUnsatRewriter
-            || round1Result
         ) {
             return status
         }
@@ -165,22 +144,12 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         lastUnsatScope = currentScope
         currentOverflowLemmas.clear()
         currentAssertedExprs = originalExpressions.map { expr ->
-            if (unsatSignednessMode == null) {
-                return@map ctx.mkAndNoSimplify(ctx.trueExpr, expr).also { currentBvAndLemmas.clear() }
-            }
-
-            unsatRewriter.rewriteBv2Int(expr).also { rewritten ->
-                currentBvAndLemmas = unsatRewriter.bvAndLemmas(rewritten).toMutableList()
+            currentRewriter.rewriteBv2Int(expr).also { rewritten ->
+                currentBvAndLemmas = currentRewriter.bvAndLemmas(rewritten).toMutableList()
                 currentOverflowLemmas.add(currentRewriter.overflowLemmas(rewritten))
             }
         }.toMutableList()
-        currentAssumptions = originalAssumptions.map {
-            if (unsatSignednessMode == null) {
-                return@map ctx.mkAndNoSimplify(ctx.trueExpr, it)
-            }
-
-            unsatRewriter.rewriteBv2Int(it)
-        }.toMutableList()
+        currentAssumptions = originalAssumptions.map { currentRewriter.rewriteBv2Int(it) }.toMutableList()
 
         reassertExpressions()
         return innerCheck(timeLeft(start, timeout))
@@ -227,7 +196,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         originalAssumptions = assumptions
         currentAssumptions = assumptions.map { currentRewriter.rewriteBv2Int(it) }.toMutableList()
 
-        return if (rewriteMode == RewriteMode.LAZY) {
+        return if (rewriterConfig.isLazyBvAnd) {
             lazyCheck(timeout)
         } else {
             signedCheck(timeout)
