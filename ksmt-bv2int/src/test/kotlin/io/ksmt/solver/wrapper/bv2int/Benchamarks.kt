@@ -3,7 +3,6 @@ package io.ksmt.solver.wrapper.bv2int
 import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
-import com.jetbrains.rd.util.string.printToString
 import io.ksmt.KContext
 import io.ksmt.expr.KApp
 import io.ksmt.expr.KBvAndExpr
@@ -13,34 +12,23 @@ import io.ksmt.expr.KBvOrExpr
 import io.ksmt.expr.KBvXNorExpr
 import io.ksmt.expr.KBvXorExpr
 import io.ksmt.expr.KExpr
-import io.ksmt.expr.KInterpretedValue
-import io.ksmt.expr.rewrite.simplify.KExprSimplifier
 import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.runner.serializer.AstSerializationCtx
 import io.ksmt.solver.KSolver
 import io.ksmt.solver.KSolverStatus
-import io.ksmt.solver.util.KExprIntInternalizerBase
 import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.sort.KBoolSort
 import io.ksmt.utils.uncheckedCast
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.RewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.AndRewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode
-import io.ksmt.solver.yices.KYicesModel
 import io.ksmt.solver.yices.KYicesSolverConfiguration
 import io.ksmt.solver.z3.KZ3SMTLibParser
-import io.ksmt.solver.z3.KZ3SmtLibWriter
-import io.ksmt.solver.z3.KZ3Solver
-import io.ksmt.solver.z3.KZ3SolverConfiguration
 import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KSort
-import io.ksmt.utils.getValue
-import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap
 import java.io.File
-import kotlin.random.Random
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -305,22 +293,20 @@ private fun KContext.runBenchmarkUsvm(
 }
 
 val innerSolver = SolverConfiguration.InnerSolver.Yices
-val rewriteMode = RewriteMode.EAGER
-val andRewriteMode = AndRewriteMode.SUM
-val signednessMode = SignednessMode.SIGNED
-val unsignedMode: SignednessMode? = null
+val rewriterConfig = KBv2IntRewriterConfig(
+    rewriteMode = RewriteMode.EAGER,
+    andRewriteMode = AndRewriteMode.SUM,
+    signednessMode = SignednessMode.SIGNED
+)
+val equisatisfiableConfig = KBv2IntRewriterConfig(disableRewriting = true)
 
 class KBv2IntCustomSolver(
     ctx: KContext,
 ) : KBv2IntSolver<KYicesSolverConfiguration>(
     ctx,
     KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
-    rewriteMode,
-    andRewriteMode,
-    signednessMode,
-    unsatSignednessMode = unsignedMode,
-    isSplitterOn = false,
-    round1Result = false
+    rewriterConfig,
+    equisatisfiableConfig
 ) {
     init {
         val solverName = innerSolver.toString().removeSuffix("MCSAT")
@@ -333,10 +319,10 @@ class KBv2IntCustomSolver(
 fun main() {
     val ctx = KContext()
     val timeout = 1.seconds
-    val expressionsFileName = "usvm-exprs3"
+    val expressionsFileName = "usvm-owasp2"
     val solvers = listOf(
-//        SolverConfiguration(ctx, innerSolver),
-        SolverConfiguration(ctx, innerSolver, rewriteMode, andRewriteMode, signednessMode, unsignedMode),
+//        SolverConfiguration(ctx, innerSolver, isOriginalSolver = true),
+        SolverConfiguration(ctx, innerSolver, rewriterConfig, equisatisfiableConfig, isOriginalSolver = false),
     )
     SolverConfiguration.manager.close()
 
@@ -386,8 +372,9 @@ fun main() {
 //    return println(expressions.map { it.second.size }.foldRight(0) { kek, acc -> kek + acc })
     for (solver in solvers) {
         ctx.runBenchmarkUsvm(
-//            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT-test.csv"),
-            outputFile = File("benchmarkResults/trash.csv"),
+//            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT.csv"),
+//            outputFile = File("benchmarkResults/trash.csv"),
+            outputFile = File("benchmarkResults/testCorrectness.csv"),
             solverConfiguration = solver,
             expressions = expressions,
             timeout

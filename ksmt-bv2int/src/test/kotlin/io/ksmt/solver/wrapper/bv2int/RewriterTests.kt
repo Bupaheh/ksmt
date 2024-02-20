@@ -20,9 +20,8 @@ import kotlin.time.Duration.Companion.seconds
 class RewriterTests {
     private fun KContext.testInt2BvModelConversion(
         exprs: List<KExpr<KBoolSort>>,
-        rewriteMode: KBv2IntRewriter.RewriteMode,
-        andRewriteMode: KBv2IntRewriter.AndRewriteMode,
-        signedness: KBv2IntRewriter.SignednessMode = KBv2IntRewriter.SignednessMode.UNSIGNED
+        rewriterConfig: KBv2IntRewriterConfig,
+        equisatisfiableConfig: KBv2IntRewriterConfig,
     ) {
         var satCnt = 0
         var timeoutCnt = 0
@@ -35,9 +34,8 @@ class RewriterTests {
                     val solver = KBv2IntSolver(
                         this,
                         innerSolver,
-                        rewriteMode,
-                        andRewriteMode,
-                        signedness
+                        rewriterConfig,
+                        equisatisfiableConfig,
                     )
                     solver.assert(expr)
 
@@ -66,9 +64,8 @@ class RewriterTests {
 
     private fun KContext.testBv2IntModelConversion(
         exprs: List<KExpr<KBoolSort>>,
-        rewriteMode: KBv2IntRewriter.RewriteMode,
-        andRewriteMode: KBv2IntRewriter.AndRewriteMode,
-        signednessMode: KBv2IntRewriter.SignednessMode = KBv2IntRewriter.SignednessMode.UNSIGNED
+        rewriterConfig: KBv2IntRewriterConfig,
+        equisatisfiableConfig: KBv2IntRewriterConfig,
     ) {
         var satCnt = 0
         var timeoutCnt = 0
@@ -108,7 +105,7 @@ class RewriterTests {
                             decl.apply().uncheckedCast<_, KExpr<KSort>>() eq default.uncheckedCast()
                         }.let { mkAnd(it) }
 
-                    KBv2IntSolver(this, solver, rewriteMode, andRewriteMode, signednessMode).use { bv2intSolver ->
+                    KBv2IntSolver(this, solver, rewriterConfig, equisatisfiableConfig).use { bv2intSolver ->
                         bv2intSolver.assert(expr and restrictions)
                         status = bv2intSolver.check(3.seconds)
                     }
@@ -159,9 +156,12 @@ class RewriterTests {
         KBv2IntSolver(
             this,
             KZ3Solver(this),
-            KBv2IntRewriter.RewriteMode.LAZY,
-            KBv2IntRewriter.AndRewriteMode.SUM,
-            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+            KBv2IntRewriterConfig(
+                KBv2IntRewriter.RewriteMode.LAZY,
+                KBv2IntRewriter.AndRewriteMode.SUM,
+                KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+            ),
+            KBv2IntRewriterConfig(disableRewriting = true)
         ).use { solver ->
             solver.assert(expr)
             solver.assert(constraints)
@@ -212,9 +212,12 @@ class RewriterTests {
 
         testInt2BvModelConversion(
             expressions,
-            KBv2IntRewriter.RewriteMode.LAZY,
-            KBv2IntRewriter.AndRewriteMode.SUM,
-            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+            KBv2IntRewriterConfig(
+                KBv2IntRewriter.RewriteMode.LAZY,
+                KBv2IntRewriter.AndRewriteMode.SUM,
+                KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+            ),
+            KBv2IntRewriterConfig(disableRewriting = true)
         )
     }
 
@@ -248,9 +251,12 @@ class RewriterTests {
 
         testBv2IntModelConversion(
             expressions,
-            KBv2IntRewriter.RewriteMode.LAZY,
-            KBv2IntRewriter.AndRewriteMode.SUM,
-            KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+            KBv2IntRewriterConfig(
+                KBv2IntRewriter.RewriteMode.LAZY,
+                KBv2IntRewriter.AndRewriteMode.SUM,
+                KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW
+            ),
+            KBv2IntRewriterConfig(disableRewriting = true)
         )
     }
 }
