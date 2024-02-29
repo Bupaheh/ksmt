@@ -79,7 +79,7 @@ class SolverConfiguration(
 
     override fun toString(): String {
         val innerSolver = solver.toString()
-        if (isOriginalSolver) return innerSolver + "-oneMore"
+        if (isOriginalSolver) return innerSolver
 
         val prefix = when (rewriterConfig.rewriteMode) {
             KBv2IntRewriter.RewriteMode.EAGER -> "Eager-"
@@ -109,7 +109,7 @@ class SolverConfiguration(
             }
         }
 
-        return prefix + innerSolver + suffix + "-second"
+        return prefix + innerSolver + suffix
     }
 
     companion object {

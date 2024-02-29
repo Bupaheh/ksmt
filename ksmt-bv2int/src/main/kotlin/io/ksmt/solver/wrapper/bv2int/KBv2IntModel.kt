@@ -21,7 +21,7 @@ class KBv2IntModel(
     override val declarations: Set<KDecl<*>> by lazy {
         model.declarations
             .filterNot { bv2IntContext.isAuxDecl(it) }
-            .mapNotNull { bv2IntContext.cachedDecl(it) }
+            .map { bv2IntContext.getOriginalDeclaration(it) ?: it }
             .toSet()
     }
 
@@ -41,7 +41,7 @@ class KBv2IntModel(
 
     override fun <T : KSort> interpretation(decl: KDecl<T>): KFuncInterp<T>? =
         interpretations.getOrPut(decl) {
-            val rewrittenDecl = bv2IntContext.cachedDecl(decl) ?: return null
+            val rewrittenDecl = bv2IntContext.getRewrittenDeclaration(decl) ?: return null
             val interpretation = model.interpretation(rewrittenDecl) ?: return null
 
             if (rewrittenDecl == decl) return interpretation.uncheckedCast()

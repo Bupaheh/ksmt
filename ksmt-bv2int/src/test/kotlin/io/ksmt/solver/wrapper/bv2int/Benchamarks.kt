@@ -296,7 +296,7 @@ val innerSolver = SolverConfiguration.InnerSolver.Yices
 val rewriterConfig = KBv2IntRewriterConfig(
     rewriteMode = RewriteMode.EAGER,
     andRewriteMode = AndRewriteMode.SUM,
-    signednessMode = SignednessMode.SIGNED
+    signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW
 )
 val equisatisfiableConfig = KBv2IntRewriterConfig(disableRewriting = true)
 
@@ -329,13 +329,13 @@ fun main() {
     val expressions = ctx.readSerializedFormulasUsvm(
         File("generatedExpressions/$expressionsFileName"),
         0,
-        2000000000
+        5
     )
         .map { (id, l) ->
             id to l
                 .filter { TempVisitor(ctx).visit(it) }
 //                .filter { ArithFilter(ctx).filter(it) }
-        }
+        }.take(4).drop(3).map { it.first to it.second.drop(21) }
 //        .take(10)
 //        .map { (id, l) ->
 //            val list = if (id != "10") l else l.take(2)

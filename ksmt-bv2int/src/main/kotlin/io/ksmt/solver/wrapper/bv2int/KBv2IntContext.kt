@@ -15,7 +15,8 @@ class KBv2IntContext(val ctx: KContext) {
     val bvAndFunc = with(ctx) { mkFreshFuncDecl("bvAnd", intSort, listOf(intSort, intSort)) }
     val powerOfTwoFunc = with(ctx) { mkFreshFuncDecl("pow2", intSort, listOf(intSort)) }
 
-    private val declarations = IdentityHashMap<KDecl<*>, KDecl<*>>()
+    private val originalDeclarations = IdentityHashMap<KDecl<*>, KDecl<*>>()
+    private val rewrittenDeclarations = IdentityHashMap<KDecl<*>, KDecl<*>>()
     private val auxDecls = hashSetOf<KDecl<*>>(bvAndFunc, powerOfTwoFunc)
     private val bvAndLemmaApplication = IdentityHashMap<KExpr<KBoolSort>, KExpr<KIntSort>>()
 
@@ -25,9 +26,11 @@ class KBv2IntContext(val ctx: KContext) {
     val two = ctx.mkIntNum(2)
 
     fun saveDecl(originalDecl: KDecl<*>, rewrittenDecl: KDecl<*>) {
-        declarations[originalDecl] = rewrittenDecl
+        originalDeclarations[originalDecl] = rewrittenDecl
+        rewrittenDeclarations[rewrittenDecl] = originalDecl
     }
-    fun cachedDecl(decl: KDecl<*>): KDecl<KSort>? = declarations[decl].uncheckedCast()
+    fun getRewrittenDeclaration(decl: KDecl<*>): KDecl<KSort>? = originalDeclarations[decl].uncheckedCast()
+    fun getOriginalDeclaration(decl: KDecl<*>): KDecl<KSort>? = rewrittenDeclarations[decl].uncheckedCast()
 
     fun isAuxDecl(decl: KDecl<*>): Boolean = decl in auxDecls
 

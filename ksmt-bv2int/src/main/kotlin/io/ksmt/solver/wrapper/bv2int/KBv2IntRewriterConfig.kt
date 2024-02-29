@@ -14,7 +14,4 @@ data class KBv2IntRewriterConfig(
 
     val isLazyBvAnd
         get() = !disableRewriting && rewriteMode == KBv2IntRewriter.RewriteMode.LAZY
-
-    val isEquisatisfiable
-        get() = disableRewriting || !isLazyBvAnd && !isLazyOverflow
 }
