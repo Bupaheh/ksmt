@@ -127,27 +127,29 @@ class IncrementalApiTest {
     fun benchmarkT() = with(KContext()) {
         val expressions = readSerializedFormulasUsvm(
             File("generatedExpressions/usvm-owasp2"),
-            3,
-            5
+            2,
+            500
         ).map { it.second.filter { TempVisitor(ctx).visit(it) } }
 
-        expressions.forEach {
+        val random = Random(2)
+
+        expressions.drop(154).forEach {
+            println("start")
             benchmarkTest(
                 expressions = it,
-                random = Random(1),
+                random = Random(2),
                 timeout = 1.seconds,
                 oracleSolverProvider = { KZ3Solver(this) },
                 solverProvider = {
-                    KZ3Solver(this)
-//                    KBv2IntSolver(
-//                        this,
-//                        KZ3Solver(this),
-//                        KBv2IntRewriterConfig(signednessMode = KBv2IntRewriter.SignednessMode.SIGNED)
-//                    )
+                    KBv2IntSolver(
+                        this,
+                        KZ3Solver(this),
+                        KBv2IntRewriterConfig(signednessMode = KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW),
+                        KBv2IntRewriterConfig(signednessMode = KBv2IntRewriter.SignednessMode.SIGNED)
+                    )
                 }
             )
         }
-
     }
 
     private fun KContext.benchmarkTest(
@@ -159,26 +161,18 @@ class IncrementalApiTest {
     ) = SolversWrapper(this, oracleSolverProvider, solverProvider).use { solvers ->
         val currentExpression: MutableList<KExpr<KBoolSort>> = expressions.toMutableList()
 
-        val ops = mutableListOf(3, 1, 3)
-
         while (currentExpression.isNotEmpty()) {
-            val op = random.nextInt(0, 4)
+            val op = random.nextInt(0, 6)
 
             println(op)
 
             when (op) {
-//                0 -> solvers.assert(currentExpression.first())
-                0 -> solvers.assertAndTrack(currentExpression.removeFirst())
-//                2 -> validateCheck(solvers) { solvers.check(timeout) }
+                0 -> solvers.assert(currentExpression.first())
+                1 -> solvers.assertAndTrack(currentExpression.removeFirst())
+                2 -> validateCheck(solvers) { solvers.check(timeout) }
                 3 -> validateCheck(solvers) { solvers.checkWithAssumptions(currentExpression.first(), timeout) }
-                1 -> {
-                    solvers.push()
-                    validateCheck(solvers) { solvers.checkWithAssumptions(trueExpr, timeout) }
-                }
-                2 -> {
-                    solvers.pop()
-                    validateCheck(solvers) { solvers.checkWithAssumptions(trueExpr, timeout) }
-                }
+                4 -> solvers.push()
+                5 -> solvers.pop()
             }
         }
     }
@@ -187,25 +181,26 @@ class IncrementalApiTest {
         solvers: SolversWrapper,
         check: () -> Pair<KSolverStatus, KSolverStatus>,
     ) {
-        val (oracleStatus, solverStatus) = try {
-            check()
-        } catch (e: Throwable) {
-            println(e)
-            throw e
-            return
-        }
+        val (oracleStatus, solverStatus) = check()
 
         if (oracleStatus == KSolverStatus.UNKNOWN || solverStatus == KSolverStatus.UNKNOWN) return
 
         assertEquals(oracleStatus, solverStatus)
+        println(oracleStatus)
 
         if (solverStatus == KSolverStatus.SAT) return
 
         val (oracleUnsatCore, unsatCore) = solvers.unsatCore()
 
-        assertEquals(oracleUnsatCore.toSet(), unsatCore.toSet())
+        val target = (solvers.assumptions + solvers.trackedAssertions).toSet()
 
-        solvers.pop()
+        if (!target.containsAll(unsatCore)) {
+            val flag = target.containsAll(oracleUnsatCore)
+
+            error("AHAHAHAH $flag")
+        }
+
+//        solvers.pop()
     }
 
     private class SolversWrapper(
@@ -227,9 +222,7 @@ class IncrementalApiTest {
             get() = trackedAssertionsStack.flatten()
 
         init {
-            opWrapper { it.checkWithAssumptions(listOf(ctx.trueExpr)) }
             opWrapper { it.push() }
-            opWrapper { it.checkWithAssumptions(listOf(ctx.trueExpr)) }
         }
 
         private inline fun <T> opWrapper(op: (KSolver<*>) -> T): Pair<T, T> {
