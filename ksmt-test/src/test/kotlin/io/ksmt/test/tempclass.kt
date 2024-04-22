@@ -6,7 +6,7 @@ import com.jetbrains.rd.framework.UnsafeBuffer
 import io.ksmt.KContext
 import io.ksmt.expr.KExpr
 import io.ksmt.runner.serializer.AstSerializationCtx
-import io.ksmt.solver.yices.KYicesSolver
+import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.sort.KBoolSort
 import io.ksmt.utils.uncheckedCast
 import java.io.File
@@ -40,13 +40,13 @@ class tempClass {
         val expr1 = exprs[0]
         val expr2 = exprs[1]
 
-        KYicesSolver(this).use { solver ->
+        KZ3Solver(this).use { solver ->
             solver.assertAndTrack(expr1)
             solver.assert(expr2)
             solver.checkWithAssumptions(emptyList()).also { println(it) }
         }
 
-        KYicesSolver(this).use { solver ->
+        KZ3Solver(this).use { solver ->
             solver.assert(expr2)
             solver.assertAndTrack(expr1)
             solver.checkWithAssumptions(emptyList()).also { println(it) }
