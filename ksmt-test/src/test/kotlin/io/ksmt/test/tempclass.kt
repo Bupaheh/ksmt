@@ -43,13 +43,13 @@ class tempClass {
         KZ3Solver(this).use { solver ->
             solver.assertAndTrack(expr1)
             solver.assert(expr2)
-            solver.checkWithAssumptions(emptyList()).also { println(it) }
+            solver.check().also { println(it) }
         }
 
         KZ3Solver(this).use { solver ->
             solver.assert(expr2)
             solver.assertAndTrack(expr1)
-            solver.checkWithAssumptions(emptyList()).also { println(it) }
+            solver.check().also { println(it) }
         }
     }
 }
