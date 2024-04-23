@@ -54,7 +54,7 @@ fun KContext.generateExpressions() {
     writeExpressionsSerialized(this, expressions, "generatedExpressions/1Snia")
 }
 
-private fun writeExpressionsSerialized(ctx: KContext, expressions: List<KExpr<KBoolSort>>, path: String) {
+fun writeExpressionsSerialized(ctx: KContext, expressions: List<KExpr<KBoolSort>>, path: String) {
     val serializationCtx = AstSerializationCtx().apply { initCtx(ctx) }
     val marshaller = AstSerializationCtx.marshaller(serializationCtx)
     val emptyRdSerializationCtx = SerializationCtx(Serializers())

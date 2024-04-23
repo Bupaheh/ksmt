@@ -5,6 +5,9 @@ import io.ksmt.solver.KSolver
 import io.ksmt.solver.KSolverStatus
 import io.ksmt.solver.bitwuzla.KBitwuzlaSolver
 import io.ksmt.solver.cvc5.KCvc5Solver
+import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter
+import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriterConfig
+import io.ksmt.solver.wrapper.bv2int.KBv2IntSolver
 import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.utils.getValue
@@ -25,6 +28,15 @@ class CheckWithAssumptionsTest {
 
     @Test
     fun testComplexAssumptionCvc() = testComplexAssumption { KCvc5Solver(it) }
+
+    @Test
+    fun testComplexAssumptionBv2Int() = testComplexAssumption {
+        KBv2IntSolver(
+            it,
+            KYicesSolver(it),
+            KBv2IntRewriterConfig(signednessMode = KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW)
+        )
+    }
 
     @Test
     fun testUnsatCoreGenerationZ3() = testUnsatCoreGeneration { KZ3Solver(it) }
@@ -49,6 +61,15 @@ class CheckWithAssumptionsTest {
 
     @Test
     fun testTrivialUnsatCoreCvc() = testTrivialUnsatCore { KCvc5Solver(it) }
+
+    @Test
+    fun testTrivialUnsatCoreBv2Int() = testComplexAssumption {
+        KBv2IntSolver(
+            it,
+            KYicesSolver(it),
+            KBv2IntRewriterConfig(signednessMode = KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW)
+        )
+    }
 
     private fun testComplexAssumption(mkSolver: (KContext) -> KSolver<*>) = with(KContext()) {
         mkSolver(this).use { solver ->

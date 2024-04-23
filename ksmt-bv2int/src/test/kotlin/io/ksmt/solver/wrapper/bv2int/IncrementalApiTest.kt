@@ -15,6 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
 class IncrementalApiTest {
@@ -79,51 +80,6 @@ class IncrementalApiTest {
     }
 
     @Test
-    fun breakZ3(): Unit = with(KContext()) {
-        KZ3Solver(this).use { solver ->
-            val s = mkUninterpretedSort("temp")
-            val a = mkUninterpretedSortValue(s, 0)
-            val b = s.mkConst("b")
-
-            solver.push()
-            solver.assert(a eq b)
-            solver.pop()
-            solver.push()
-            solver.push()
-            solver.checkWithAssumptions(listOf(a eq b))
-        }
-    }
-
-    @Test
-    fun breakZ32(): Unit = with(KContext()) {
-        KZ3Solver(this).use { solver ->
-            val s = mkUninterpretedSort("temp")
-            val a = mkUninterpretedSortValue(s, 0)
-            val b = s.mkConst("b")
-
-            solver.push()
-            solver.checkWithAssumptions(listOf(a eq b))
-            solver.checkWithAssumptions(listOf(a eq b))
-            solver.push()
-            solver.checkWithAssumptions(listOf(a eq b))
-            solver.checkWithAssumptions(listOf(a eq b))
-            solver.pop()
-            solver.checkWithAssumptions(listOf(a eq b))
-        }
-    }
-
-    @Test
-    fun breakYices(): Unit = with(KContext()) {
-        KYicesSolver(this).use { solver ->
-            val s = mkUninterpretedSort("temp")
-            val a = mkUninterpretedSortValue(s, 0)
-            val b = s.mkConst("b")
-
-            solver.checkWithAssumptions(listOf(a eq b))
-        }
-    }
-
-    @Test
     fun benchmarkT() = with(KContext()) {
         val expressions = readSerializedFormulasUsvm(
             File("generatedExpressions/usvm-owasp2"),
@@ -131,14 +87,12 @@ class IncrementalApiTest {
             500
         ).map { it.second.filter { TempVisitor(ctx).visit(it) } }
 
-        val random = Random(2)
-
-        expressions.drop(154).forEach {
-            println("start")
+        expressions.forEach {
+            println("start iteration")
             benchmarkTest(
                 expressions = it,
                 random = Random(2),
-                timeout = 1.seconds,
+                timeout = 1.hours,
                 oracleSolverProvider = { KZ3Solver(this) },
                 solverProvider = {
                     KBv2IntSolver(
@@ -164,13 +118,21 @@ class IncrementalApiTest {
         while (currentExpression.isNotEmpty()) {
             val op = random.nextInt(0, 6)
 
-            println(op)
+            val opStr = when (op) {
+                0 -> "assert"
+                1 -> "assertAndTrack"
+                2 -> "check"
+                3 -> "checkWithAssumptions"
+                4 -> "push"
+                else -> "pop"
+            }
+            println("--------\n$opStr\n--------")
 
             when (op) {
-                0 -> solvers.assert(currentExpression.first())
+                0 -> solvers.assert(currentExpression.removeFirst())
                 1 -> solvers.assertAndTrack(currentExpression.removeFirst())
                 2 -> validateCheck(solvers) { solvers.check(timeout) }
-                3 -> validateCheck(solvers) { solvers.checkWithAssumptions(currentExpression.first(), timeout) }
+                3 -> validateCheck(solvers) { solvers.checkWithAssumptions(currentExpression.removeFirst(), timeout) }
                 4 -> solvers.push()
                 5 -> solvers.pop()
             }
@@ -182,11 +144,16 @@ class IncrementalApiTest {
         check: () -> Pair<KSolverStatus, KSolverStatus>,
     ) {
         val (oracleStatus, solverStatus) = check()
+        println("after check")
 
         if (oracleStatus == KSolverStatus.UNKNOWN || solverStatus == KSolverStatus.UNKNOWN) return
 
+        println(solverStatus)
+        if (oracleStatus != solverStatus) {
+            val t = 7
+        }
         assertEquals(oracleStatus, solverStatus)
-        println(oracleStatus)
+//        println(oracleStatus)
 
         if (solverStatus == KSolverStatus.SAT) return
 
@@ -226,7 +193,9 @@ class IncrementalApiTest {
         }
 
         private inline fun <T> opWrapper(op: (KSolver<*>) -> T): Pair<T, T> {
+            println("solver")
             val solverResult = op(solver)
+            println("oracle")
             val oracleResult = op(oracle)
 
             return oracleResult to solverResult
