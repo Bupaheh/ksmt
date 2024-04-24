@@ -24,7 +24,7 @@ import kotlin.time.Duration.Companion.seconds
 class Bv2IntBenchmark : BenchmarksBasedTest() {
     private val outputPath = "report.csv"
     private val outputFile = File(outputPath)
-    private val checkTimeout = 3.seconds
+    private val checkTimeout = 24.seconds
     private val repeatNum = 3
 
     private val solversToBenchmark = System.getenv("bv2intSolvers")
@@ -58,7 +58,6 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
 
         KYicesEagerSumSignedLazyOverflowOriginalUnsat::class to "Yices-Eager-Sum-SignedLazyOverflow-OriginalUnsat",
         KYicesEagerSumSignedLazyOverflowOriginalUnsatSplit::class to "Yices-Eager-Sum-SignedLazyOverflow-OriginalUnsat-Split",
-        KYicesEagerSumSignedLazyOverflow::class to "Yices-Eager-Sum-SignedLazyOverflow",
         KYicesEagerSumUnsigned::class to "Yices-Eager-Sum-Unsigned",
     ).filter { (_, name) -> name in solversToBenchmark }.uncheckedCast()
 
