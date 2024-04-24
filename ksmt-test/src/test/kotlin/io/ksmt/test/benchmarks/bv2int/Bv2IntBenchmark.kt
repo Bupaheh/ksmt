@@ -54,11 +54,11 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
         KCvc5EagerSumSignedLazyOverflow::class to "Cvc5-Eager-Sum-SignedLazyOverflow",
         KZ3EagerSumSigned::class to "Z3-Eager-Sum-Signed",
         KYicesEagerSumUnsigned::class to "Yices-Eager-Sum-Unsigned",
+        KYicesEagerSumSigned::class to "Yices-Eager-Sum-Signed",
         KCvc5EagerSumUnsigned::class to "Cvc5-Eager-Sum-Unsigned",
 
         KYicesEagerSumSignedLazyOverflowOriginalUnsat::class to "Yices-Eager-Sum-SignedLazyOverflow-OriginalUnsat",
         KYicesEagerSumSignedLazyOverflowOriginalUnsatSplit::class to "Yices-Eager-Sum-SignedLazyOverflow-OriginalUnsat-Split",
-        KYicesEagerSumUnsigned::class to "Yices-Eager-Sum-Unsigned",
     ).filter { (_, name) -> name in solversToBenchmark }.uncheckedCast()
 
     @ParameterizedTest(name = "{0}")

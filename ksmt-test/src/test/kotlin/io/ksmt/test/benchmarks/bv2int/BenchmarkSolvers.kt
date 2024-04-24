@@ -234,6 +234,19 @@ class KYicesEagerSumUnsigned(
         KBv2IntRewriter.SignednessMode.UNSIGNED,
     ),
 )
+
+class KYicesEagerSumSigned(
+    ctx: KContext
+) : KBv2IntSolver<KYicesSolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
+    KBv2IntRewriterConfig(
+        KBv2IntRewriter.RewriteMode.EAGER,
+        KBv2IntRewriter.AndRewriteMode.SUM,
+        KBv2IntRewriter.SignednessMode.SIGNED,
+    ),
+)
+
 class KZ3EagerSumUnsigned(
     ctx: KContext
 ) : KBv2IntSolver<KZ3SolverConfiguration>(
