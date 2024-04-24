@@ -128,8 +128,6 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private fun innerCheck(timeout: Duration): KSolverStatus {
         if (timeout.isNegative()) return KSolverStatus.UNKNOWN
 
-        println("$currentConfig ")
-
         return if (scopes.isEmptyAssumptions) {
             solver.check(timeout)
         } else {
