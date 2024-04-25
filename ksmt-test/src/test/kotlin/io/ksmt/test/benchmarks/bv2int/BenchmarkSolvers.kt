@@ -270,6 +270,18 @@ class KCvc5EagerSumUnsigned(
     ),
 )
 
+class KCvc5EagerSumSigned(
+    ctx: KContext
+) : KBv2IntSolver<KCvc5SolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KCvc5Solver(ctx)),
+    KBv2IntRewriterConfig(
+        KBv2IntRewriter.RewriteMode.EAGER,
+        KBv2IntRewriter.AndRewriteMode.SUM,
+        KBv2IntRewriter.SignednessMode.SIGNED,
+    ),
+)
+
 class KYicesEagerSumSignedLazyOverflowOriginalUnsat(
     ctx: KContext
 ) : KBv2IntSolver<KYicesSolverConfiguration>(
