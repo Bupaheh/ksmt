@@ -13,6 +13,17 @@ import io.ksmt.solver.z3.KZ3SolverConfiguration
 
 class KYicesSolverBench(ctx: KContext) : KBenchmarkSolverWrapper<KYicesSolverConfiguration>(ctx, KYicesSolver(ctx))
 class KZ3SolverBench(ctx: KContext) : KBenchmarkSolverWrapper<KZ3SolverConfiguration>(ctx, KZ3Solver(ctx))
+class KZ3IntBlast(ctx: KContext) : KBenchmarkSolverWrapper<KZ3SolverConfiguration>(
+    ctx,
+    KZ3Solver(ctx).also {
+        it.configure {
+            setZ3Option("sat.smt", true)
+            setZ3Option("smt.bv.solver", 2)
+        }
+    }
+)
+
+
 class KCvc5SolverBench(ctx: KContext) : KBenchmarkSolverWrapper<KCvc5SolverConfiguration>(ctx, KCvc5Solver(ctx))
 class KYicesLazySumSignedLazyOverflowUnsignedUnsat(
     ctx: KContext

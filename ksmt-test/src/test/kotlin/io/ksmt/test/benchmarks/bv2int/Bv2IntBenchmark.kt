@@ -36,6 +36,7 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
     private val solvers: List<Pair<KClass<KSolver<KSolverConfiguration>>, String>> = listOf(
         KYicesSolverBench::class to "Yices",
         KZ3SolverBench::class to "Z3",
+        KZ3IntBlast::class to "Z3-IntBlast",
         KCvc5SolverBench::class to "Cvc5",
         KYicesLazySumSignedLazyOverflowUnsignedUnsat::class to "Yices-Lazy-Sum-SignedLazyOverflow-UnsignedUnsat",
         KYicesLazySumSignedLazyOverflowSignedUnsat::class to "Yices-Lazy-Sum-SignedLazyOverflow-SignedUnsat",
