@@ -3,19 +3,26 @@ package io.ksmt.solver.wrapper.bv2int
 import com.jetbrains.rd.framework.SerializationCtx
 import com.jetbrains.rd.framework.Serializers
 import com.jetbrains.rd.framework.UnsafeBuffer
+import com.sri.yices.YicesException
 import io.ksmt.KContext
 import io.ksmt.expr.KApp
 import io.ksmt.expr.KBvAndExpr
+import io.ksmt.expr.KBvArithShiftRightExpr
+import io.ksmt.expr.KBvLogicalShiftRightExpr
 import io.ksmt.expr.KBvNAndExpr
 import io.ksmt.expr.KBvNorExpr
 import io.ksmt.expr.KBvOrExpr
 import io.ksmt.expr.KBvXNorExpr
 import io.ksmt.expr.KBvXorExpr
 import io.ksmt.expr.KExpr
+import io.ksmt.expr.KInterpretedValue
 import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.runner.serializer.AstSerializationCtx
 import io.ksmt.solver.KSolver
+import io.ksmt.solver.KSolverException
 import io.ksmt.solver.KSolverStatus
+import io.ksmt.solver.cvc5.KCvc5Solver
+import io.ksmt.solver.cvc5.KCvc5SolverConfiguration
 import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.sort.KBoolSort
 import io.ksmt.utils.uncheckedCast
@@ -24,9 +31,12 @@ import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.AndRewriteMode
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode
 import io.ksmt.solver.yices.KYicesSolverConfiguration
 import io.ksmt.solver.z3.KZ3SMTLibParser
+import io.ksmt.solver.z3.KZ3Solver
+import io.ksmt.solver.z3.KZ3SolverConfiguration
 import io.ksmt.sort.KBvSort
 import io.ksmt.sort.KSort
 import java.io.File
+import kotlin.random.Random
 import kotlin.system.measureNanoTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.nanoseconds
@@ -36,6 +46,7 @@ import kotlin.time.Duration.Companion.seconds
 class TempVisitor(ctx: KContext) : KNonRecursiveTransformer(ctx) {
     private var cmp = false
     private var bit = true
+    private var sh = true
 
     override fun <T : KSort, A : KSort> transformApp(expr: KApp<T, A>): KExpr<T> {
         return super.transformApp(expr)
@@ -43,7 +54,7 @@ class TempVisitor(ctx: KContext) : KNonRecursiveTransformer(ctx) {
 
     fun <T : KSort> visit(expr: KExpr<T>): Boolean {
         apply(expr)
-        return bit
+        return sh
     }
 
     private fun visitBitwiseOp(lhs: KExpr<*>, rhs: KExpr<*>) {
@@ -88,6 +99,18 @@ class TempVisitor(ctx: KContext) : KNonRecursiveTransformer(ctx) {
         visitBitwiseOp(expr.arg0, expr.arg1)
         return super.transform(expr)
     }
+
+    override fun <T: KBvSort> transform(expr: KBvLogicalShiftRightExpr<T>): KExpr<T> {
+        if (expr.shift !is KInterpretedValue) sh = false
+
+        return super.transform(expr)
+    }
+
+    override fun <T: KBvSort> transform(expr: KBvArithShiftRightExpr<T>): KExpr<T> {
+        if (expr.shift !is KInterpretedValue) sh = false
+
+        return super.transform(expr)
+    }
 }
 
 fun KSolver<*>.getCheckTime(default: Long): Long {
@@ -129,7 +152,7 @@ fun KContext.readSerializedFormulasUsvm(dir: File, begin: Int, end: Int): List<P
     val expressions: MutableList<Pair<String, List<KExpr<KBoolSort>>>> = mutableListOf()
 
     files
-//        .shuffled(Random(1))
+        .shuffled(Random(1))
         .sortedBy { it.path.substringAfterLast("/").toInt() }
         .drop(begin)
         .take(end - begin + 1)
@@ -219,6 +242,9 @@ private fun KContext.measureAssertTime(
             }
         }
     } catch (e: Throwable) {
+        if (e !is KSolverException) {
+            throw e
+        }
         println(e.message)
 //        solver.close()
         return MeasureAssertTimeResult(timeout.inWholeNanoseconds, timeout.inWholeNanoseconds, KSolverStatus.UNKNOWN, -2)
@@ -279,6 +305,7 @@ private fun KContext.runBenchmarkUsvm(
         exprs.forEachIndexed { idx, expr ->
             println("$exprId/${expressions.size}")
             println("$idx/${exprs.size}")
+            println("$exprId-$idx")
 
             val res = measureAssertTime(expr, solverConfiguration, timeout)
 
@@ -296,15 +323,25 @@ val innerSolver = SolverConfiguration.InnerSolver.Yices
 val rewriterConfig = KBv2IntRewriterConfig(
     rewriteMode = RewriteMode.EAGER,
     andRewriteMode = AndRewriteMode.SUM,
-    signednessMode = SignednessMode.SIGNED_LAZY_OVERFLOW
+    signednessMode = SignednessMode.SIGNED
 )
-val equisatisfiableConfig = KBv2IntRewriterConfig(disableRewriting = true)
+val equisatisfiableConfig = KBv2IntRewriterConfig(signednessMode = SignednessMode.SIGNED)
 
 class KBv2IntCustomSolver(
     ctx: KContext,
 ) : KBv2IntSolver<KYicesSolverConfiguration>(
     ctx,
-    KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx)),
+    KBenchmarkSolverWrapper(ctx,
+//        KZ3Solver(ctx),
+        KYicesSolver(ctx)
+//            .also {
+//            it.configure {
+//                this.defaultForLogic("QF_ANIA")
+////                this.setYicesOption("solver-type", "mcsat")
+////                setYicesOption("mode", "push-pop")
+//            }
+//        }
+    ),
     rewriterConfig,
     equisatisfiableConfig
 ) {
@@ -319,23 +356,31 @@ class KBv2IntCustomSolver(
 fun main() {
     val ctx = KContext()
     val timeout = 1.seconds
-    val expressionsFileName = "usvm-owasp2"
+//    val expressionsFileName = "usvm-owasp2"
+    val expressionsFileName = "tsa-exprs"
     val solvers = listOf(
 //        SolverConfiguration(ctx, innerSolver, isOriginalSolver = true),
         SolverConfiguration(ctx, innerSolver, rewriterConfig, equisatisfiableConfig, isOriginalSolver = false),
     )
-    SolverConfiguration.manager.close()
 
     val expressions = ctx.readSerializedFormulasUsvm(
         File("generatedExpressions/$expressionsFileName"),
         0,
-        5
+        100000000
     )
         .map { (id, l) ->
             id to l
-                .filter { TempVisitor(ctx).visit(it) }
+                .filterNot { TempVisitor(ctx).visit(it) }
 //                .filter { ArithFilter(ctx).filter(it) }
-        }.take(4).drop(3).map { it.first to it.second.drop(21) }
+        }
+
+//        .map { (exprId, exprs) ->
+//            exprId to exprs.filterIndexed { idx, expr ->
+//                "$exprId-$idx" == "1-2"
+//            }
+//        }
+
+
 //        .take(10)
 //        .map { (id, l) ->
 //            val list = if (id != "10") l else l.take(2)
@@ -372,9 +417,9 @@ fun main() {
 //    return println(expressions.map { it.second.size }.foldRight(0) { kek, acc -> kek + acc })
     for (solver in solvers) {
         ctx.runBenchmarkUsvm(
-//            outputFile = File("benchmarkResults/${expressionsFileName}-UNBIT.csv"),
+            outputFile = File("benchmarkResults/${expressionsFileName}-woshift.csv"),
 //            outputFile = File("benchmarkResults/trash.csv"),
-            outputFile = File("benchmarkResults/testCorrectness.csv"),
+//            outputFile = File("benchmarkResults/temptest.csv"),
             solverConfiguration = solver,
             expressions = expressions,
             timeout
