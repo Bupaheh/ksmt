@@ -28,15 +28,9 @@ class SolverConfiguration(
         fun construct(ctx: KContext) =
             when (this) {
                 Z3 -> KBenchmarkSolverWrapper(ctx, KZ3Solver(ctx))
-                CVC5 -> manager.createSolver(ctx, KCvc5Solver::class)
-                Yices -> KBenchmarkSolverWrapper(
-                    ctx,
-                    KYicesSolver(ctx).apply {
-//                        configure { defaultForLogic("QF_NIA") }
-                    }
-                )
-                Yices -> manager.createSolver(ctx, KYicesSolver::class)
-                Bitwuzla -> KBitwuzlaSolver(ctx)
+                CVC5 -> KBenchmarkSolverWrapper(ctx, KCvc5Solver(ctx))
+                Yices -> KBenchmarkSolverWrapper(ctx, KYicesSolver(ctx))
+                Bitwuzla -> KBenchmarkSolverWrapper(ctx, KBitwuzlaSolver(ctx))
             }
 
         override fun toString(): String =
@@ -44,6 +38,7 @@ class SolverConfiguration(
                 Z3 -> "Z3"
                 CVC5 -> "cvc5"
                 Yices -> "Yices"
+//                Yices -> "YicesMCSAT"
                 Bitwuzla -> "Bitwuzla"
             }
     }
@@ -110,13 +105,5 @@ class SolverConfiguration(
         }
 
         return prefix + innerSolver + suffix
-    }
-
-    companion object {
-        val manager = KSolverRunnerManager(hardTimeout = 5.seconds, workerProcessIdleTimeout = 40.seconds)
-
-        init {
-//            manager.registerSolver(KBv2IntCustomSolver::class, KYicesSolverUniversalConfiguration::class)
-        }
     }
 }
