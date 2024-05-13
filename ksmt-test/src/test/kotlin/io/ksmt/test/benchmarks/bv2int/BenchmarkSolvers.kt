@@ -207,6 +207,22 @@ class KZ3EagerSumSignedLazyOverflow(
         KBv2IntRewriter.SignednessMode.SIGNED,
     )
 )
+class KZ3EagerBitSignedLazyOverflow(
+    ctx: KContext
+) : KBv2IntSolver<KZ3SolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KZ3Solver(ctx)),
+    KBv2IntRewriterConfig(
+        KBv2IntRewriter.RewriteMode.EAGER,
+        KBv2IntRewriter.AndRewriteMode.BITWISE,
+        KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW,
+    ),
+    KBv2IntRewriterConfig(
+        KBv2IntRewriter.RewriteMode.EAGER,
+        KBv2IntRewriter.AndRewriteMode.BITWISE,
+        KBv2IntRewriter.SignednessMode.SIGNED,
+    )
+)
 class KCvc5EagerSumSignedLazyOverflow(
     ctx: KContext
 ) : KBv2IntSolver<KCvc5SolverConfiguration>(
