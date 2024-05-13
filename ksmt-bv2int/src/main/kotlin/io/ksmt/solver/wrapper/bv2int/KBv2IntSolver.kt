@@ -97,12 +97,12 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
             solver.assert(exprsToAssert)
             solver.assertAndTrack(exprsToAssertAndTrack)
 
-            scopeAssertions.zip(exprsToAssert).forEach { newScope.assert(it.first, it.second, rewriter) }
-            scopeTrackedAssertions.zip(exprsToAssertAndTrack).forEach { newScope.assertAndTrack(it.first, it.second, rewriter) }
+            scopeAssertions.zip(exprsToAssert).forEach { newScope.assert(it.first, it.second, currentRewriter) }
+            scopeTrackedAssertions.zip(exprsToAssertAndTrack).forEach { newScope.assertAndTrack(it.first, it.second, currentRewriter) }
         }
 
         val rewrittenAssumptions = assumptions.map { currentRewriter.rewriteBv2Int(it) }
-        newScope.assume(assumptions, rewrittenAssumptions, rewriter)
+        newScope.assume(assumptions, rewrittenAssumptions, currentRewriter)
 
         scopes = newScope
     }
@@ -211,7 +211,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
         val rewritten = assumptions.map { currentRewriter.rewriteBv2Int(it) }
 
-        scopes.assume(assumptions, rewritten, rewriter)
+        scopes.assume(assumptions, rewritten, currentRewriter)
 
         return if (currentConfig.isLazyBvAnd) {
             lazyCheck(timeout)
