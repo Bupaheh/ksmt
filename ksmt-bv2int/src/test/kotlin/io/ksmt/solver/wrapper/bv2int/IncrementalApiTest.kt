@@ -11,12 +11,13 @@ import io.ksmt.utils.getValue
 import io.ksmt.utils.mkConst
 import java.io.File
 import kotlin.random.Random
+import kotlin.system.measureNanoTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.nanoseconds
 
 class IncrementalApiTest {
     private val ctx = KContext()
@@ -77,6 +78,53 @@ class IncrementalApiTest {
         solver.pop()
         status = solver.check()
         assertEquals(KSolverStatus.SAT, status)
+    }
+
+    private fun genRandomString(len: UInt): String {
+        val builder = StringBuilder()
+
+        repeat(len.toInt()) {
+            builder.append(Random.nextInt(0, 1))
+        }
+
+        return builder.toString()
+    }
+
+    @Test
+    fun intBlasting() = with(KContext()) {
+        val len = 1024u
+        val s = mkBvSort(len)
+
+        val a by s
+        val b by s
+
+        val aVal = mkBv(genRandomString(len), len)
+        val bVal = mkBv(genRandomString(len), len)
+        val result = mkBvMulExpr(aVal, bVal)
+
+        val solver = KZ3Solver(this).apply {
+            configure {
+                setZ3Option("sat.smt", true)
+                setZ3Option("smt.bv.solver", 2)
+            }
+        }
+//        val solver = KBv2IntSolver(
+//            this,
+//            KZ3Solver(this),
+//            KBv2IntRewriterConfig(signednessMode = KBv2IntRewriter.SignednessMode.UNSIGNED)
+//        )
+
+        solver.assert(mkBvMulExpr(a, b) eq result)
+
+        val time = measureNanoTime {
+            val result = solver.checkWithAssumptions(listOf(a eq aVal, b eq bVal))
+
+            println(result)
+        }
+
+        println(time.nanoseconds)
+
+        solver.close()
     }
 
     @Test
