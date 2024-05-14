@@ -17,7 +17,7 @@ import kotlin.time.Duration.Companion.milliseconds
 open class KBv2IntSolver<Config: KSolverConfiguration>(
     private val ctx: KContext,
     private val solver: KSolver<Config>,
-    private val rewriterConfig: KBv2IntRewriterConfig,
+    rewriterConfig: KBv2IntRewriterConfig,
     equisatisfiableRewriterConfig: KBv2IntRewriterConfig = KBv2IntRewriterConfig(disableRewriting = true),
 ) : KSolver<Config> {
     private val bv2IntContext = KBv2IntContext(ctx)
@@ -311,6 +311,9 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
         val isEmptyAssumptions: Boolean
             get() = assumptionsSize == 0
+
+        val isEmpty: Boolean
+            get() = assumptionsSize == 0 && assertions.all { it.isEmpty() } && trackedAssertions.all { it.isEmpty() }
 
         fun assert(expr: KExpr<KBoolSort>, rewritten: KExpr<KBoolSort>, rewriter: KBv2IntRewriter) {
             modifyCurrentScope(
