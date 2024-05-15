@@ -44,11 +44,11 @@ tasks.withType<Test> {
     systemProperty("junit.jupiter.execution.parallel.enabled", true)
 }
 
-tasks.register<Jar>("dokkaJavadocJar") {
-    dependsOn(tasks.dokkaJavadoc)
-    from(tasks.dokkaJavadoc.flatMap { it.outputDirectory })
-    archiveClassifier.set("javadoc")
-}
+//tasks.register<Jar>("dokkaJavadocJar") {
+//    dependsOn(tasks.dokkaJavadoc)
+//    from(tasks.dokkaJavadoc.flatMap { it.outputDirectory })
+//    archiveClassifier.set("javadoc")
+//}
 
 publishing {
     repositories {
