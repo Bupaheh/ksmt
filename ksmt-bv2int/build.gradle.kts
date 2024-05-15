@@ -15,7 +15,6 @@ dependencies {
     testImplementation(project(":ksmt-yices"))
     testImplementation(project(":ksmt-bitwuzla"))
     testImplementation(project(":ksmt-runner"))
-    testImplementation(project(":ksmt-test"))
 }
 
 publishing {
