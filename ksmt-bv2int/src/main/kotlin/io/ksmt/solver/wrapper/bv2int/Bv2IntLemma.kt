@@ -32,6 +32,7 @@ fun mergeLemmas(arg0: Bv2IntLemma, arg1: Bv2IntLemma, arg2: Bv2IntLemma): Bv2Int
         else -> Triple(arg0, arg1, arg2)
     }
 
+@Suppress("MagicNumber")
 inline fun mergeLemmas(list: List<KExpr<*>>, transform: (KExpr<*>) -> Bv2IntLemma): Bv2IntLemma {
     var size = 0
     var first = EMPTY_LEMMA

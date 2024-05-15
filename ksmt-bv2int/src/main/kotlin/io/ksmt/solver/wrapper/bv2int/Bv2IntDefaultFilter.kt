@@ -27,6 +27,7 @@ class Bv2IntDefaultFilter(ctx: KContext) : KNonRecursiveVisitor<Boolean>(ctx) {
     private fun visitBitwiseOp(lhs: KExpr<*>, rhs: KExpr<*>) =
         lhs is KInterpretedValue || rhs is KInterpretedValue
 
+    @Suppress("UnusedPrivateMember")
     private fun visitShift(arg: KExpr<*>, shift: KExpr<*>) = shift is KInterpretedValue
 
     override fun <T: KBvSort> visit(expr: KBvAndExpr<T>): KExprVisitResult<Boolean> {

@@ -139,9 +139,11 @@ import io.ksmt.expr.printer.ExpressionPrinter
 import io.ksmt.expr.rewrite.KExprUninterpretedDeclCollector
 import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.expr.transformer.KTransformerBase
+import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.WrapMode.NORMALIZED_SIGNED
 import io.ksmt.solver.wrapper.bv2int.KBv2IntRewriter.WrapMode.NORMALIZED_UNSIGNED
-import io.ksmt.solver.wrapper.bv2int.Signedness.*
+import io.ksmt.solver.wrapper.bv2int.Signedness.SIGNED
+import io.ksmt.solver.wrapper.bv2int.Signedness.UNSIGNED
 import io.ksmt.sort.KArithSort
 import io.ksmt.sort.KArray2Sort
 import io.ksmt.sort.KArray3Sort
@@ -306,7 +308,7 @@ class KBv2IntRewriter(
         transformExprAfterTransformedBv2Int(
             expr,
             postRewriteMode = WrapMode.NONE,
-            checkOverflow = config.signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
+            checkOverflow = config.signednessMode == SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
         ) {
             val sort = expr.sort
             val const = rewriteDecl(expr.decl).apply(listOf())
@@ -323,12 +325,13 @@ class KBv2IntRewriter(
         transformExprAfterTransformedBv2Int(
             expr,
             expr.args,
-            checkOverflow = config.signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
+            checkOverflow = config.signednessMode == SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
         ) { args ->
             rewriteDecl(expr.decl).apply(args).tryAddBoundLemmas(expr.sort)
         }
     }
 
+    @Suppress("UnusedPrivateMember")
     private inline fun rewriteEqZeroLshr(
         lhs: KBv2IntAuxExpr,
         rhs: KBv2IntAuxExpr,
@@ -691,7 +694,7 @@ class KBv2IntRewriter(
             dependency1 = expr.arg1,
             preprocessMode = WrapMode.NONE,
             postRewriteMode = WrapMode.NORMALIZED_UNSIGNED,
-            checkOverflow = config.signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS
+            checkOverflow = config.signednessMode == SIGNED_LAZY_OVERFLOW_NO_BOUNDS
         ) { arg0: KBv2IntAuxExpr, arg1: KBv2IntAuxExpr ->
             val sizeBits = expr.sort.sizeBits
             val normalizedArg0 = arg0.normalized(UNSIGNED)
@@ -1458,8 +1461,9 @@ class KBv2IntRewriter(
                         canNormalize = canNormalize
                     )
                 }
-                config.isLazyOverflow && canNormalize(arg) -> KBv2IntAuxExprNormalized(result, sizeBits, normalizedSignedness)
-                    .updatePowerOfTwoMaxArg(sizeBits.toInt() - 1)
+                config.isLazyOverflow && canNormalize(arg) ->
+                    KBv2IntAuxExprNormalized(result, sizeBits, normalizedSignedness)
+                        .updatePowerOfTwoMaxArg(sizeBits.toInt() - 1)
                 else -> KBv2IntAuxExprDenormalized(result, sizeBits)
                     .updatePowerOfTwoMaxArg(sizeBits.toInt() - 1)
             }
@@ -1819,7 +1823,7 @@ class KBv2IntRewriter(
             expr,
             expr.array,
             expr.index,
-            checkOverflow = config.signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
+            checkOverflow = config.signednessMode == SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
         ) { array: KExpr<KArraySort<KSort, KSort>>, index: KExpr<KSort> ->
             mkArraySelect(array, index.uncheckedCast()).tryAddBoundLemmas(expr.sort)
         }
@@ -1833,7 +1837,7 @@ class KBv2IntRewriter(
             expr.array,
             expr.index0,
             expr.index1,
-            checkOverflow = config.signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
+            checkOverflow = config.signednessMode == SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
         ) { array: KExpr<KArray2Sort<KSort, KSort, KSort>>, i0: KExpr<KSort>, i1: KExpr<KSort> ->
             mkArraySelect(array, i0.uncheckedCast(), i1.uncheckedCast()).tryAddBoundLemmas(expr.sort)
         }
@@ -1848,7 +1852,7 @@ class KBv2IntRewriter(
             expr.index0,
             expr.index1,
             expr.index2,
-            checkOverflow = config.signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
+            checkOverflow = config.signednessMode == SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
         ) { array: KExpr<KArray3Sort<KSort, KSort, KSort, KSort>>,
             i0: KExpr<KSort>,
             i1: KExpr<KSort>,
@@ -1867,7 +1871,7 @@ class KBv2IntRewriter(
         transformExprAfterTransformedBv2Int(
             expr,
             expr.args,
-            checkOverflow = config.signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
+            checkOverflow = config.signednessMode == SIGNED_LAZY_OVERFLOW_NO_BOUNDS && expr.sort is KBvSort
         ) { args ->
             val array: KExpr<KArrayNSort<KSort>> = args.first().uncheckedCast()
             val indices = args.subList(fromIndex = 1, toIndex = args.size)
@@ -2450,7 +2454,7 @@ class KBv2IntRewriter(
         exprSignedness: Signedness = signedness
     ) = with(ctx) {
         val expr = tryUnwrap()
-        if (sort !is KBvSort || config.signednessMode == SignednessMode.SIGNED_LAZY_OVERFLOW_NO_BOUNDS) return expr
+        if (sort !is KBvSort || config.signednessMode == SIGNED_LAZY_OVERFLOW_NO_BOUNDS) return expr
 
         val sizeBits = sort.sizeBits
         val (lowerBound, upperBound) = getBounds(sizeBits, exprSignedness)
@@ -2540,6 +2544,7 @@ class KBv2IntRewriter(
         }
     }
 
+    @Suppress("LongParameterList")
     private inner class KBv2IntAuxExprExtract(
         override val denormalized: KExpr<KIntSort>,
         private val normalized: KExpr<KIntSort>,
@@ -2562,6 +2567,7 @@ class KBv2IntRewriter(
             ctx.mkIntExtractBits(originalExpr, high + this.low, low + this.low)
     }
 
+    @Suppress("LongParameterList")
     private inner class KBv2IntAuxExprShl(
         private val normalized: KExpr<KIntSort>,
         override val denormalized: KExpr<KIntSort>,
@@ -2631,7 +2637,7 @@ class KBv2IntRewriter(
         override fun normalized(signedness: Signedness): KExpr<KIntSort> = denormalized
     }
 
-    abstract inner class KBv2IntAuxExprShift(
+    private abstract inner class KBv2IntAuxExprShift(
         val originalExpr: KBv2IntAuxExpr,
         private val normalizedShift: Long,
         private val defaultBit: KExpr<KIntSort>,
@@ -2734,7 +2740,7 @@ class KBv2IntRewriter(
             ctx.normalizeExpr(denormalized, signedness, sizeBits)
     }
 
-    abstract inner class KBv2IntAuxExpr(
+    private abstract inner class KBv2IntAuxExpr(
         ctx: KContext,
         val sizeBits: UInt,
     ) : KExpr<KIntSort>(ctx) {
@@ -2769,6 +2775,7 @@ class KBv2IntRewriter(
         private val boundsSet = bounds.toHashSet()
         private var newBody: KExpr<KBoolSort> = body
 
+        @Suppress("UnusedPrivateMember")
         inline fun distributeLemmas(
             constructor: (KExpr<KBoolSort>, List<KDecl<*>>) -> KExpr<KBoolSort>
         ): KExpr<KBoolSort> {
@@ -2866,8 +2873,6 @@ class KBv2IntRewriter(
         } else {
             signedToUnsigned(value, sizeBits)
         }
-
-    private fun KContext.mkPowerOfTwoExpr(power: UInt): KExpr<KIntSort> = powerOfTwo(power).expr
 
     private fun KContext.mkIntExtractBit(arg: KExpr<KIntSort>, bit: UInt) =
         arg / mkPowerOfTwoExpr(bit) mod bv2IntContext.two
