@@ -66,7 +66,7 @@ z3Binaries.forEach { (sourceSet, z3BinaryTask, nativeConfig) ->
 
             artifact(jarTask.get())
             artifact(sourcesJarTask.get())
-            artifact(project.tasks["dokkaJavadocJar"])
+//            artifact(project.tasks["dokkaJavadocJar"])
 
             addKsmtPom()
             signKsmtPublication(project)
