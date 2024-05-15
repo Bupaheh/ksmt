@@ -64,7 +64,7 @@ fun MavenPublication.signKsmtPublication(project: Project) = with(project) {
 
 fun MavenPublication.addSourcesAndJavadoc(project: Project) {
     artifact(project.tasks["kotlinSourcesJar"])
-    artifact(project.tasks["dokkaJavadocJar"])
+//    artifact(project.tasks["dokkaJavadocJar"])
 }
 
 fun MavenPublication.addEmptyArtifact(project: Project): Unit = with(project) {

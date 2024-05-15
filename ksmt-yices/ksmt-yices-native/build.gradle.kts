@@ -58,7 +58,7 @@ yicesBinaries.entries.forEach { (sourceSet, nativeConfig) ->
 
             artifact(jarTask.get())
             artifact(sourcesJarTask.get())
-            artifact(project.tasks["dokkaJavadocJar"])
+//            artifact(project.tasks["dokkaJavadocJar"])
 
             addKsmtPom()
             signKsmtPublication(project)
