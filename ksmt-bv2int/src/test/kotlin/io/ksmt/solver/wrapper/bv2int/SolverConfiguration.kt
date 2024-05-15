@@ -7,7 +7,6 @@ import io.ksmt.solver.cvc5.KCvc5Solver
 import io.ksmt.solver.cvc5.KCvc5SolverUniversalConfiguration
 import io.ksmt.solver.runner.KSolverRunnerManager
 import io.ksmt.solver.yices.KYicesSolver
-import io.ksmt.solver.yices.KYicesSolverUniversalConfiguration
 import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.utils.mkConst
 import kotlin.time.Duration.Companion.seconds
@@ -38,7 +37,6 @@ class SolverConfiguration(
                 Z3 -> "Z3"
                 CVC5 -> "cvc5"
                 Yices -> "Yices"
-//                Yices -> "YicesMCSAT"
                 Bitwuzla -> "Bitwuzla"
             }
     }

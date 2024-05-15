@@ -4,7 +4,6 @@ import io.ksmt.KContext
 import io.ksmt.expr.KExpr
 import io.ksmt.solver.KSolver
 import io.ksmt.solver.KSolverStatus
-import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.sort.KBoolSort
 import io.ksmt.utils.getValue

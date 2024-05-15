@@ -39,7 +39,8 @@ class KBv2IntSplitter(ctx: KContext) : KNonRecursiveTransformer(ctx) {
         val bvArgs = expr.args.filter {  expr ->
             val sort = expr.sort
             expr !is KInterpretedValue &&
-                    (sort is KBvSort || sort is KArraySortBase<*> && (sort.range is KBvSort || sort.domainSorts.any { it is KBvSort }))
+                    (sort is KBvSort || sort is KArraySortBase<*>
+                            && (sort.range is KBvSort || sort.domainSorts.any { it is KBvSort }))
         }
 
         if (bvArgs.isEmpty()) return@apply

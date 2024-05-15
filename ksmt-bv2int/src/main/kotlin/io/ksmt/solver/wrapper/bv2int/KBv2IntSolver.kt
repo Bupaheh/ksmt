@@ -98,7 +98,9 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
             solver.assertAndTrack(exprsToAssertAndTrack)
 
             scopeAssertions.zip(exprsToAssert).forEach { newScope.assert(it.first, it.second, currentRewriter) }
-            scopeTrackedAssertions.zip(exprsToAssertAndTrack).forEach { newScope.assertAndTrack(it.first, it.second, currentRewriter) }
+            scopeTrackedAssertions.zip(exprsToAssertAndTrack).forEach {
+                newScope.assertAndTrack(it.first, it.second, currentRewriter)
+            }
         }
 
         val rewrittenAssumptions = assumptions.map { currentRewriter.rewriteBv2Int(it) }
@@ -408,6 +410,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
                 }
         }
 
+        @Suppress("LongParameterList")
         private inline fun modifyCurrentScope(
             modifyAssertions: (MutableList<KExpr<KBoolSort>>) -> Unit,
             modifyRewrittenAssertions: (MutableList<KExpr<KBoolSort>>) -> Unit,
@@ -424,6 +427,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
             modifyOverflowLemmas = { modifyOverflowLemmas(it.last()) }
         )
 
+        @Suppress("LongParameterList")
         private inline fun modifyScope(
             modifyAssertions: (MutableList<MutableList<KExpr<KBoolSort>>>) -> Unit,
             modifyRewrittenAssertions: (MutableList<MutableList<KExpr<KBoolSort>>>) -> Unit,
