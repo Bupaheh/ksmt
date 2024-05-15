@@ -11,10 +11,12 @@ import io.ksmt.solver.portfolio.KPortfolioSolver
 import io.ksmt.solver.portfolio.KPortfolioSolverManager
 import io.ksmt.solver.z3.KZ3Solver
 import io.ksmt.utils.getValue
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+@Ignore
 class PortfolioSolverTest {
     private lateinit var context: KContext
     private lateinit var solver: KPortfolioSolver

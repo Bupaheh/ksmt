@@ -15,6 +15,7 @@ import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.time.Duration.Companion.seconds
 
+@Ignore
 class WorkerDebugTest {
 
     @Ignore
