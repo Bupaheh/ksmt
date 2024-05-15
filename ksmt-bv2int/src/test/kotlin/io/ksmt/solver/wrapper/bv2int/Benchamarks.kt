@@ -166,7 +166,7 @@ fun KContext.readSerializedFormulasUsvm(dir: File, begin: Int, end: Int): List<P
             while (true) {
                 try {
                     currentExpressions.add(srcMarshaller.read(emptyRdSerializationCtx, buffer).uncheckedCast())
-                } catch (e : Exception) {
+                } catch (_ : Exception) {
 //                    println(e)
                     break
                 }
