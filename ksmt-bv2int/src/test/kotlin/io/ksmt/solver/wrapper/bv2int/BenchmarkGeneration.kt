@@ -1,26 +1,9 @@
 package io.ksmt.solver.wrapper.bv2int
 
-import com.jetbrains.rd.framework.SerializationCtx
-import com.jetbrains.rd.framework.Serializers
-import com.jetbrains.rd.framework.UnsafeBuffer
 import io.ksmt.KContext
-import io.ksmt.expr.KExpr
-import io.ksmt.expr.KInterpretedValue
-import io.ksmt.expr.rewrite.simplify.KExprSimplifier
-import io.ksmt.runner.serializer.AstSerializationCtx
-import io.ksmt.solver.KSolverStatus
-import io.ksmt.solver.yices.KYicesSolver
 import io.ksmt.solver.z3.KZ3SMTLibParser
 import io.ksmt.solver.z3.KZ3SmtLibWriter
-import io.ksmt.sort.KBoolSort
-import io.ksmt.test.GenerationParameters
-import io.ksmt.utils.getValue
-import io.ksmt.utils.mkConst
-import io.ksmt.utils.uncheckedCast
 import java.io.File
-import java.nio.ByteBuffer
-import kotlin.random.Random
-import kotlin.time.Duration.Companion.seconds
 
 val generalDecls = setOf(
     "or", "and", "not", "implies", "xor", "=", "distinct", "ite",

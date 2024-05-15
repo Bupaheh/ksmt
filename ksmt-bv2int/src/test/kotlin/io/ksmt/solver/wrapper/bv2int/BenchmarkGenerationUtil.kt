@@ -9,50 +9,49 @@ import io.ksmt.expr.KInterpretedValue
 import io.ksmt.runner.serializer.AstSerializationCtx
 import io.ksmt.solver.z3.KZ3SMTLibParser
 import io.ksmt.sort.KBoolSort
-import io.ksmt.test.GenerationParameters
 import java.io.File
 import java.nio.ByteBuffer
 import kotlin.random.Random
 
-fun KContext.generateExpressions() {
-    val params = GenerationParameters(
-        seedExpressionsPerSort = 20,
-        possibleIntValues = 2..64,
-        deepExpressionProbability = 0.3,
-        generatedListSize = 2..3,
-        astFilter = Bv2IntAstFilter()
-    )
-    val weights = Bv2IntBenchmarkWeightBuilder()
-        .enableBvCmp(3.7)
-        .setWeight("mkBvUnsignedGreaterExpr", 0.3)
-        .setWeight("mkBvUnsignedGreaterOrEqualExpr", 0.3)
-        .setWeight("mkBvUnsignedLessExpr", 0.3)
-        .setWeight("mkBvUnsignedLessOrEqualExpr", 0.3)
-        .enableBvLia(10.0)
-        .enableBvNia(0.65)
-//        .enableArray(1.25)
-//        .enableBvBitwise(0.25)
-//        .enableBvWeird(0.875)
-//        .enableBvShift(1.0)
-        .build()
-    // mkBvSort disabled
-    val expressions = generateRandomExpressions(
-        size = 5000,
-        batchSize = 1000,
-        params = params,
-        random = Random(55),
-        weights = weights,
-        isVerbose = true,
-        predicate = { expr ->
-            niaDecls.any { decl ->
-                KDeclCounter(this).countDeclarations(expr).getOrDefault(decl, 0) > 0
-            }
-        }
-    )
-
-
-    writeExpressionsSerialized(this, expressions, "generatedExpressions/1Snia")
-}
+//fun KContext.generateExpressions() {
+//    val params = GenerationParameters(
+//        seedExpressionsPerSort = 20,
+//        possibleIntValues = 2..64,
+//        deepExpressionProbability = 0.3,
+//        generatedListSize = 2..3,
+//        astFilter = Bv2IntAstFilter()
+//    )
+//    val weights = Bv2IntBenchmarkWeightBuilder()
+//        .enableBvCmp(3.7)
+//        .setWeight("mkBvUnsignedGreaterExpr", 0.3)
+//        .setWeight("mkBvUnsignedGreaterOrEqualExpr", 0.3)
+//        .setWeight("mkBvUnsignedLessExpr", 0.3)
+//        .setWeight("mkBvUnsignedLessOrEqualExpr", 0.3)
+//        .enableBvLia(10.0)
+//        .enableBvNia(0.65)
+////        .enableArray(1.25)
+////        .enableBvBitwise(0.25)
+////        .enableBvWeird(0.875)
+////        .enableBvShift(1.0)
+//        .build()
+//    // mkBvSort disabled
+//    val expressions = generateRandomExpressions(
+//        size = 5000,
+//        batchSize = 1000,
+//        params = params,
+//        random = Random(55),
+//        weights = weights,
+//        isVerbose = true,
+//        predicate = { expr ->
+//            niaDecls.any { decl ->
+//                KDeclCounter(this).countDeclarations(expr).getOrDefault(decl, 0) > 0
+//            }
+//        }
+//    )
+//
+//
+//    writeExpressionsSerialized(this, expressions, "generatedExpressions/1Snia")
+//}
 
 fun writeExpressionsSerialized(ctx: KContext, expressions: List<KExpr<KBoolSort>>, path: String) {
     val serializationCtx = AstSerializationCtx().apply { initCtx(ctx) }
