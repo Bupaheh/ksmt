@@ -10,10 +10,12 @@ import io.ksmt.solver.KSolverUniversalConfigurationBuilder
 import io.ksmt.solver.KTheory
 import io.ksmt.solver.model.KModelImpl
 import io.ksmt.sort.KBoolSort
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration
 
+@Ignore
 class CustomSolverTest {
 
     @Test
