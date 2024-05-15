@@ -6,8 +6,11 @@ import io.ksmt.expr.KArray3Store
 import io.ksmt.expr.KArrayConst
 import io.ksmt.expr.KArrayNStore
 import io.ksmt.expr.KArrayStore
+import io.ksmt.expr.KConst
 import io.ksmt.expr.KExpr
+import io.ksmt.expr.KFunctionApp
 import io.ksmt.expr.KIntNumExpr
+import io.ksmt.expr.KIteExpr
 import io.ksmt.expr.transformer.KNonRecursiveTransformer
 import io.ksmt.sort.KArray2Sort
 import io.ksmt.sort.KArray3Sort
@@ -21,7 +24,8 @@ import io.ksmt.utils.ArithUtils.bigIntegerValue
 import io.ksmt.utils.uncheckedCast
 
 class KBv2IntConverter(
-    ctx: KContext
+    ctx: KContext,
+    private val bv2IntContext: KBv2IntContext
 ) : KNonRecursiveTransformer(ctx) {
     private val expectedSort = hashMapOf<KExpr<*>, KSort>()
 
@@ -39,10 +43,42 @@ class KBv2IntConverter(
         expectedSort.containsKey(expr) && expectedSort[expr] != expr.sort
 
     override fun transformIntNum(expr: KIntNumExpr): KExpr<KIntSort> = with(ctx) {
-        val sort = expectedSort[expr] ?: error("Unexpected ...")
+        val sort = expectedSort[expr] ?: error("Unexpected expr $expr")
         require(sort is KBvSort)
 
         mkBv(expr.bigIntegerValue, sort.sizeBits).uncheckedCast()
+    }
+
+    override fun <T: KSort> transform(expr: KConst<T>): KExpr<T> =
+        transformExprAfterTransformedWithSorts(expr) {
+            bv2IntContext.getOriginalDeclaration(expr.decl)?.apply(emptyList())
+                ?: error("Unexpected expr $expr")
+        }
+
+    override fun <R : KSort> transform(expr: KFunctionApp<R>): KExpr<R> {
+        val convertedDecl = bv2IntContext.getOriginalDeclaration(expr.decl)
+            ?: error("Unexpected expr $expr")
+
+        return transformExprAfterTransformedWithSorts(
+            expr = expr,
+            dependencies = expr.args,
+            dependencySort = { _, idx -> convertedDecl.argSorts[idx] }
+        ) { args ->
+            convertedDecl.apply(args)
+        }
+    }
+
+    override fun <T: KSort> transform(expr: KIteExpr<T>): KExpr<T> = with(ctx) {
+        transformExprAfterTransformedWithSorts(
+            expr = expr,
+            dependency0 = expr.condition,
+            dependency1 = expr.trueBranch,
+            dependency2 = expr.falseBranch,
+            dependency0Sort = { boolSort },
+            dependency1Sort = { it },
+            dependency2Sort = { it },
+            transformer = ::mkIte
+        )
     }
 
     override fun <A : KArraySortBase<R>, R : KSort> transform(expr: KArrayConst<A, R>): KExpr<A> = with(ctx) {
@@ -124,13 +160,24 @@ class KBv2IntConverter(
         ctx.mkArrayNStore(array.uncheckedCast(), indices, value)
     }
 
+    private inline fun <T : KSort> transformExprAfterTransformedWithSorts(
+        expr: KExpr<T>,
+        transformer: () -> KExpr<*>
+    ): KExpr<T> {
+        val sort = expectedSort[expr] ?: error("Unexpected expr $expr")
+
+        return transformer()
+            .also { require(it.sort == sort) }
+            .uncheckedCast()
+    }
+
     private inline fun <T : KSort, A : KSort> transformExprAfterTransformedWithSorts(
         expr: KExpr<T>,
         dependency: KExpr<*>,
         dependencySort: (T) -> A,
         transformer: (KExpr<A>) -> KExpr<*>
     ): KExpr<T> {
-        val sort = expectedSort[expr] ?: error("Unexpected ...")
+        val sort = expectedSort[expr] ?: error("Unexpected expr $expr")
 
         expectedSort[dependency] = dependencySort(sort.uncheckedCast())
 
@@ -157,7 +204,7 @@ class KBv2IntConverter(
         dependency2Sort: (T) -> A2,
         transformer: (KExpr<A0>, KExpr<A1>, KExpr<A2>) -> KExpr<*>
     ): KExpr<T> {
-        val sort = expectedSort[expr] ?: error("Unexpected ...")
+        val sort = expectedSort[expr] ?: error("Unexpected expr $expr")
 
         expectedSort[dependency0] = dependency0Sort(sort.uncheckedCast())
         expectedSort[dependency1] = dependency1Sort(sort.uncheckedCast())
@@ -189,7 +236,7 @@ class KBv2IntConverter(
         dependency3Sort: (T) -> A3,
         transformer: (KExpr<A0>, KExpr<A1>, KExpr<A2>, KExpr<A3>) -> KExpr<*>
     ): KExpr<T> {
-        val sort = expectedSort[expr] ?: error("Unexpected ...")
+        val sort = expectedSort[expr] ?: error("Unexpected expr $expr")
 
         expectedSort[dependency0] = dependency0Sort(sort.uncheckedCast())
         expectedSort[dependency1] = dependency1Sort(sort.uncheckedCast())
@@ -231,7 +278,7 @@ class KBv2IntConverter(
         dependency4Sort: (T) -> A4,
         transformer: (KExpr<A0>, KExpr<A1>, KExpr<A2>, KExpr<A3>, KExpr<A4>) -> KExpr<*>
     ): KExpr<T> {
-        val sort = expectedSort[expr] ?: error("Unexpected ...")
+        val sort = expectedSort[expr] ?: error("Unexpected expr $expr")
 
         expectedSort[dependency0] = dependency0Sort(sort.uncheckedCast())
         expectedSort[dependency1] = dependency1Sort(sort.uncheckedCast())
@@ -263,7 +310,7 @@ class KBv2IntConverter(
         dependencySort: (T, Int) -> KSort,
         transformer: (List<KExpr<KSort>>) -> KExpr<*>
     ): KExpr<T> {
-        val sort = expectedSort[expr] ?: error("Unexpected ...")
+        val sort = expectedSort[expr] ?: error("Unexpected expr $expr")
 
         dependencies.forEachIndexed { idx, d ->
             expectedSort[d] = dependencySort(sort.uncheckedCast(), idx)

@@ -6,6 +6,8 @@ import io.ksmt.expr.KExpr
 import io.ksmt.expr.KUninterpretedSortValue
 import io.ksmt.solver.KModel
 import io.ksmt.solver.model.KFuncInterp
+import io.ksmt.solver.model.KFuncInterpEntryVarsFree
+import io.ksmt.solver.model.KFuncInterpEntryWithVars
 import io.ksmt.solver.model.KFuncInterpVarsFree
 import io.ksmt.solver.model.KModelEvaluator
 import io.ksmt.solver.model.KModelImpl
@@ -20,7 +22,8 @@ class KBv2IntModel(
 ) : KModel {
     override val declarations: Set<KDecl<*>> by lazy {
         model.declarations
-            .filterNot { bv2IntContext.isAuxDecl(it) }
+            // It is expected that interpretations will not contain these declarations
+            .filterNot { bv2IntContext.isAuxDecl(it) || it.name == "div0" || it.name == "mod0" }
             .map { bv2IntContext.getOriginalDeclaration(it) ?: it }
             .toSet()
     }
@@ -46,12 +49,30 @@ class KBv2IntModel(
 
             if (rewrittenDecl == decl) return interpretation.uncheckedCast()
 
-            if (interpretation.entries.isNotEmpty()) TODO()
-
-            val default = interpretation.default?.let { KBv2IntConverter(ctx).convertExpr(it, decl.sort) }
-
-            return KFuncInterpVarsFree(decl, listOf(), default)
+            convertInterpretation(decl, interpretation)
         }.uncheckedCast()
+
+    private fun <T : KSort, R : KSort> convertInterpretation(
+        originalDeclaration: KDecl<T>,
+        interpretation: KFuncInterp<R>,
+    ) : KFuncInterp<T> {
+        val convertedEntries = interpretation.entries.map { entry ->
+            if (entry is KFuncInterpEntryWithVars) TODO()
+
+            val args = entry.args.zip(originalDeclaration.argSorts).map { (arg, originalArgSort) ->
+                convertExpr(arg, originalArgSort)
+            }
+            val value = convertExpr(entry.value, originalDeclaration.sort)
+
+            KFuncInterpEntryVarsFree.create(args, value)
+        }
+        val default = interpretation.default?.let { convertExpr(it, originalDeclaration.sort) }
+
+        return KFuncInterpVarsFree(originalDeclaration, convertedEntries, default).uncheckedCast()
+    }
+
+    private fun <T : KSort> convertExpr(expr: KExpr<*>, sort: T): KExpr<T> =
+            KBv2IntConverter(ctx, bv2IntContext).convertExpr(expr, sort)
 
     override fun uninterpretedSortUniverse(sort: KUninterpretedSort): Set<KUninterpretedSortValue>? =
         model.uninterpretedSortUniverse(sort)
