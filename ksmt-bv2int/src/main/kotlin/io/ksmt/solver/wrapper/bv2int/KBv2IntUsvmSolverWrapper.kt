@@ -99,6 +99,7 @@ class KBv2IntUsvmSolverWrapper<Config: KSolverConfiguration>(
     override fun push() {
         require(currentScope == 0)
 
+        currentScope++
         currentSolver.push()
     }
 
