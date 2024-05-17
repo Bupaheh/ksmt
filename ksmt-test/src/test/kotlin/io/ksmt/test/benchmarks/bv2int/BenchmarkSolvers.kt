@@ -309,6 +309,18 @@ class KCvc5EagerSumUnsigned(
     ),
 )
 
+class KCvc5EagerBitUnsigned(
+    ctx: KContext
+) : KBv2IntSolver<KCvc5SolverConfiguration>(
+    ctx,
+    KBenchmarkSolverWrapper(ctx, KCvc5Solver(ctx)),
+    KBv2IntRewriterConfig(
+        KBv2IntRewriter.RewriteMode.EAGER,
+        KBv2IntRewriter.AndRewriteMode.BITWISE,
+        KBv2IntRewriter.SignednessMode.UNSIGNED,
+    ),
+)
+
 class KCvc5EagerSumSigned(
     ctx: KContext
 ) : KBv2IntSolver<KCvc5SolverConfiguration>(
