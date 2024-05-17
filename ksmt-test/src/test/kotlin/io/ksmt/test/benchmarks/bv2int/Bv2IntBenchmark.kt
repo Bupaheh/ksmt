@@ -59,6 +59,7 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
         KYicesEagerBitUnsigned::class to "Yices-Eager-Bit-Unsigned",
         KYicesEagerSumSigned::class to "Yices-Eager-Sum-Signed",
         KCvc5EagerSumUnsigned::class to "Cvc5-Eager-Sum-Unsigned",
+        KCvc5EagerBitUnsigned::class to "Cvc5-Eager-Bit-Unsigned",
         KCvc5EagerSumSigned::class to "Cvc5-Eager-Sum-Signed",
 
         KYicesEagerSumSignedLazyOverflowOriginalUnsat::class to "Yices-Eager-Sum-SignedLazyOverflow-OriginalUnsat",
