@@ -25,7 +25,7 @@ class Bv2IntBenchmark : BenchmarksBasedTest() {
     private val outputPath = "report.csv"
     private val outputFile = File(outputPath)
     private val checkTimeout = 24.seconds
-    private val repeatNum = 3
+    private val repeatNum = 1
 
     private val solversToBenchmark = System.getenv("bv2intSolvers")
         .orEmpty()
