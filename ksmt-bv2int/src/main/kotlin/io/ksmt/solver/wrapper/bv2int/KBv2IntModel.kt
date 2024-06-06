@@ -2,7 +2,9 @@ package io.ksmt.solver.wrapper.bv2int
 
 import io.ksmt.KContext
 import io.ksmt.decl.KDecl
+import io.ksmt.decl.KFuncDecl
 import io.ksmt.expr.KExpr
+import io.ksmt.expr.KFunctionAsArray
 import io.ksmt.expr.KUninterpretedSortValue
 import io.ksmt.solver.KModel
 import io.ksmt.solver.model.KFuncInterp
@@ -11,6 +13,7 @@ import io.ksmt.solver.model.KFuncInterpEntryWithVars
 import io.ksmt.solver.model.KFuncInterpVarsFree
 import io.ksmt.solver.model.KModelEvaluator
 import io.ksmt.solver.model.KModelImpl
+import io.ksmt.sort.KArraySortBase
 import io.ksmt.sort.KSort
 import io.ksmt.sort.KUninterpretedSort
 import io.ksmt.utils.uncheckedCast
@@ -28,7 +31,7 @@ class KBv2IntModel(
             .toSet()
     }
 
-    private val interpretations = hashMapOf<KDecl<*>, KFuncInterp<*>?>()
+    private val interpretations = hashMapOf<KDecl<*>, KFuncInterp<*>>()
     override val uninterpretedSorts: Set<KUninterpretedSort>
         get() = model.uninterpretedSorts
 
@@ -47,7 +50,7 @@ class KBv2IntModel(
             val rewrittenDecl = bv2IntContext.getRewrittenDeclaration(decl) ?: return null
             val interpretation = model.interpretation(rewrittenDecl) ?: return null
 
-            if (rewrittenDecl == decl) return interpretation.uncheckedCast()
+            if (rewrittenDecl == decl) return@getOrPut interpretation.uncheckedCast()
 
             convertInterpretation(decl, interpretation)
         }.uncheckedCast()
@@ -71,22 +74,34 @@ class KBv2IntModel(
         return KFuncInterpVarsFree(originalDeclaration, convertedEntries, default).uncheckedCast()
     }
 
-    private fun <T : KSort> convertExpr(expr: KExpr<*>, sort: T): KExpr<T> =
-            KBv2IntConverter(ctx, bv2IntContext).convertExpr(expr, sort)
+    private fun <T : KSort> convertExpr(expr: KExpr<*>, sort: T): KExpr<T> = with(ctx) {
+        if (expr is KFunctionAsArray<*, *>) {
+            require(sort is KArraySortBase<*>)
+
+            val rewrittenFunc = expr.function
+            val originalFunc: KFuncDecl<KSort> = bv2IntContext.getOriginalDeclaration(rewrittenFunc).uncheckedCast()
+                ?: mkFreshFuncDecl("array", sort.range, sort.domainSorts).also {
+                    bv2IntContext.saveDecl(it, rewrittenFunc)
+                    interpretation(it)
+                }
+
+            return@with mkFunctionAsArray(sort.uncheckedCast(), originalFunc).uncheckedCast()
+        }
+
+        KBv2IntConverter(ctx, bv2IntContext).convertExpr(expr, sort)
+    }
 
     override fun uninterpretedSortUniverse(sort: KUninterpretedSort): Set<KUninterpretedSortValue>? =
         model.uninterpretedSortUniverse(sort)
 
     override fun detach(): KModel {
-        val interpretations = declarations.associateWith {
-            interpretation(it) ?: error("missed interpretation for $it")
-        }
+        declarations.forEach { interpretation(it) ?: error("missed interpretation for $it") }
 
         val uninterpretedSortsUniverses = uninterpretedSorts.associateWith {
             uninterpretedSortUniverse(it) ?: error("missed sort universe for $it")
         }
 
-        return KModelImpl(ctx, interpretations, uninterpretedSortsUniverses)
+        return KModelImpl(ctx, interpretations.toMap(), uninterpretedSortsUniverses)
     }
 
     override fun close() {
