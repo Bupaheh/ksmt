@@ -35,9 +35,13 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private val currentConfig
         get() = if (isUnsatRewriter) unsatRewriter.config else rewriter.config
 
-    private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, splitter.dsu, rewriterConfig)
+    protected open fun createBv2IntRewriter(config: KBv2IntRewriterConfig): KBv2IntRewriter {
+        return KBv2IntRewriter(ctx, bv2IntContext, splitter.dsu, config)
+    }
+
+    private val rewriter = createBv2IntRewriter(rewriterConfig)
     private val unsatRewriter by lazy {
-        KBv2IntRewriter(ctx, bv2IntContext, splitter.dsu, equisatisfiableRewriterConfig)
+        createBv2IntRewriter(equisatisfiableRewriterConfig)
     }
 
     private var scopes = Scopes(currentConfig)
