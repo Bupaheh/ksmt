@@ -15,13 +15,13 @@ import kotlin.time.Duration.Companion.milliseconds
 
 
 open class KBv2IntSolver<Config: KSolverConfiguration>(
-    private val ctx: KContext,
+    protected val ctx: KContext,
     private val solver: KSolver<Config>,
     rewriterConfig: KBv2IntRewriterConfig,
     equisatisfiableRewriterConfig: KBv2IntRewriterConfig = KBv2IntRewriterConfig(disableRewriting = true),
 ) : KSolver<Config> {
-    private val bv2IntContext = KBv2IntContext(ctx)
-    private val splitter = KBv2IntSplitter(ctx)
+    protected val bv2IntContext = KBv2IntContext(ctx)
+    protected val splitter = KBv2IntSplitter(ctx)
 
     private var currentScope: UInt = 0u
     private var lastCheckStatus = KSolverStatus.UNKNOWN
