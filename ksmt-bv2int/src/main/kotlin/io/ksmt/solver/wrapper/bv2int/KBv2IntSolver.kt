@@ -62,6 +62,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     }
 
     override fun assert(expr: KExpr<KBoolSort>) {
+        scopes.resetAssumptions()
+
         if (currentConfig.enableSplitter) splitter.apply(expr)
         val rewritten = currentRewriter.rewriteBv2Int(expr)
 
@@ -70,6 +72,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     }
 
     override fun assertAndTrack(expr: KExpr<KBoolSort>) {
+        scopes.resetAssumptions()
+
         if (currentConfig.enableSplitter) splitter.apply(expr)
         val rewritten = currentRewriter.rewriteBv2Int(expr)
 
@@ -78,6 +82,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     }
 
     private fun reassertExpressions() {
+        scopes.resetAssumptions()
+
         solver.pop(currentScope + 1u)
 
         val newScope = Scopes(currentConfig)
@@ -213,6 +219,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     override fun check(timeout: Duration): KSolverStatus = checkWithAssumptions(emptyList(), timeout)
 
     override fun checkWithAssumptions(assumptions: List<KExpr<KBoolSort>>, timeout: Duration): KSolverStatus {
+        scopes.resetAssumptions()
         roundCnt = 1
 
         val rewritten = assumptions.map { currentRewriter.rewriteBv2Int(it) }
@@ -224,18 +231,21 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         } else {
             signedCheck(timeout)
         }.also {
-            scopes.resetAssumptions()
             lastCheckStatus = it
         }
     }
 
     override fun push() {
+        scopes.resetAssumptions()
+
         currentScope++
         solver.push()
         scopes.push()
     }
 
     override fun pop(n: UInt) {
+        scopes.resetAssumptions()
+
         solver.pop(n)
         scopes.pop(n)
 
@@ -411,6 +421,10 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
                     trackedAssertions.flatten().zip(rewrittenTrackedAssertions.flatten()))
                 .mapNotNull { (expr, rewritten) ->
                     expr.takeIf { rewritten in unsatCoreSet }
+                }.also {
+                    check(it.size == unsatCoreSet.size) {
+                        "Unsat core resolution failure"
+                    }
                 }
         }
 
