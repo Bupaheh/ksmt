@@ -422,7 +422,7 @@ open class KBv2IntSolver<Config : KSolverConfiguration>(
                     trackedAssertions.flatten().zip(rewrittenTrackedAssertions.flatten()))
                 .mapNotNull { (expr, rewritten) ->
                     if (rewritten in unsatCoreSet) {
-                        foundPreimage[expr] = true
+                        foundPreimage[rewritten] = true
                         expr
                     } else {
                         null
