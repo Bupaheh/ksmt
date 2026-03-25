@@ -14,7 +14,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 
-open class KBv2IntSolver<Config: KSolverConfiguration>(
+open class KBv2IntSolver<Config : KSolverConfiguration>(
     protected val ctx: KContext,
     private val solver: KSolver<Config>,
     rewriterConfig: KBv2IntRewriterConfig,
@@ -416,13 +416,19 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
         fun resolveUnsatCore(unsatCore: List<KExpr<KBoolSort>>): List<KExpr<KBoolSort>> {
             val unsatCoreSet = unsatCore.toSet()
+            val foundPreimage = unsatCoreSet.associateWith { false }.toMutableMap()
 
             return (assumptions.zip(rewrittenAssumptions) +
                     trackedAssertions.flatten().zip(rewrittenTrackedAssertions.flatten()))
                 .mapNotNull { (expr, rewritten) ->
-                    expr.takeIf { rewritten in unsatCoreSet }
+                    if (rewritten in unsatCoreSet) {
+                        foundPreimage[expr] = true
+                        expr
+                    } else {
+                        null
+                    }
                 }.also {
-                    check(it.size == unsatCoreSet.size) {
+                    check(foundPreimage.values.all { it }) {
                         "Unsat core resolution failure"
                     }
                 }
