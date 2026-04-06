@@ -88,5 +88,5 @@ fun lemmaFlatten(root: Bv2IntLemma): List<KExpr<KBoolSort>> {
         }
     }
 
-    return lemmas.uncheckedCast()
+    return lemmas.toHashSet().toList().uncheckedCast()
 }
