@@ -21,6 +21,7 @@ fun mergeLemmas(arg0: Bv2IntLemma, arg1: Bv2IntLemma): Bv2IntLemma =
     when {
         isEmptyLemma(arg0) -> arg1
         isEmptyLemma(arg1) -> arg0
+        arg0 === arg1 -> arg0
         else -> arg0 to arg1
     }
 
@@ -29,6 +30,9 @@ fun mergeLemmas(arg0: Bv2IntLemma, arg1: Bv2IntLemma, arg2: Bv2IntLemma): Bv2Int
         isEmptyLemma(arg0) -> mergeLemmas(arg1, arg2)
         isEmptyLemma(arg1) -> mergeLemmas(arg0, arg2)
         isEmptyLemma(arg2) -> mergeLemmas(arg0, arg1)
+        arg0 === arg1 -> mergeLemmas(arg0, arg2)
+        arg0 === arg2 -> mergeLemmas(arg0, arg1)
+        arg1 === arg2 -> mergeLemmas(arg0, arg1)
         else -> Triple(arg0, arg1, arg2)
     }
 
