@@ -3,6 +3,8 @@ package io.ksmt.solver.wrapper.bv2int
 import io.ksmt.expr.KExpr
 import io.ksmt.sort.KBoolSort
 import io.ksmt.utils.uncheckedCast
+import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet
+import java.util.IdentityHashMap
 
 typealias Bv2IntLemma = Any
 
@@ -69,14 +71,18 @@ inline fun mergeLemmas(list: List<KExpr<*>>, transform: (KExpr<*>) -> Bv2IntLemm
 }
 
 fun lemmaFlatten(root: Bv2IntLemma): List<KExpr<KBoolSort>> {
-    val lemmas: MutableList<KExpr<*>> = mutableListOf()
+    val lemmas = ObjectOpenHashSet<KExpr<KBoolSort>>()
     val stack = ArrayList<Bv2IntLemma>()
+    val visited = IdentityHashMap<Any, Unit>()
 
     stack.add(root)
 
     while (stack.isNotEmpty()) {
-        when (val lemma = stack.removeLast()) {
-            is KExpr<*> -> lemmas.add(lemma)
+        val lemma = stack.removeLast()
+        if (visited.putIfAbsent(lemma, Unit) != null) continue
+
+        when (lemma) {
+            is KExpr<*> -> lemmas.add(lemma.uncheckedCast())
             is Pair<*, *> -> {
                 stack.add(lemma.first.uncheckedCast())
                 stack.add(lemma.second.uncheckedCast())
@@ -88,9 +94,9 @@ fun lemmaFlatten(root: Bv2IntLemma): List<KExpr<KBoolSort>> {
                 stack.add(lemma.third.uncheckedCast())
             }
 
-            is List<*> -> stack.addAll(lemma.uncheckedCast())
+            is List<*> -> lemma.forEach { stack.add(it.uncheckedCast()) }
         }
     }
 
-    return lemmas.toHashSet().toList().uncheckedCast()
+    return lemmas.toList()
 }
