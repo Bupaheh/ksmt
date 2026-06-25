@@ -14,14 +14,14 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 
-open class KBv2IntSolver<Config: KSolverConfiguration>(
-    private val ctx: KContext,
+open class KBv2IntSolver<Config : KSolverConfiguration>(
+    protected val ctx: KContext,
     private val solver: KSolver<Config>,
     rewriterConfig: KBv2IntRewriterConfig,
     equisatisfiableRewriterConfig: KBv2IntRewriterConfig = KBv2IntRewriterConfig(disableRewriting = true),
 ) : KSolver<Config> {
-    private val bv2IntContext = KBv2IntContext(ctx)
-    private val splitter = KBv2IntSplitter(ctx)
+    protected val bv2IntContext = KBv2IntContext(ctx)
+    protected val splitter = KBv2IntSplitter(ctx)
 
     private var currentScope: UInt = 0u
     private var lastCheckStatus = KSolverStatus.UNKNOWN
@@ -35,9 +35,13 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     private val currentConfig
         get() = if (isUnsatRewriter) unsatRewriter.config else rewriter.config
 
-    private val rewriter = KBv2IntRewriter(ctx, bv2IntContext, splitter.dsu, rewriterConfig)
+    protected open fun createBv2IntRewriter(config: KBv2IntRewriterConfig): KBv2IntRewriter {
+        return KBv2IntRewriter(ctx, bv2IntContext, splitter.dsu, config)
+    }
+
+    private val rewriter = createBv2IntRewriter(rewriterConfig)
     private val unsatRewriter by lazy {
-        KBv2IntRewriter(ctx, bv2IntContext, splitter.dsu, equisatisfiableRewriterConfig)
+        createBv2IntRewriter(equisatisfiableRewriterConfig)
     }
 
     private var scopes = Scopes(currentConfig)
@@ -58,6 +62,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     }
 
     override fun assert(expr: KExpr<KBoolSort>) {
+        scopes.resetAssumptions()
+
         if (currentConfig.enableSplitter) splitter.apply(expr)
         val rewritten = currentRewriter.rewriteBv2Int(expr)
 
@@ -66,6 +72,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     }
 
     override fun assertAndTrack(expr: KExpr<KBoolSort>) {
+        scopes.resetAssumptions()
+
         if (currentConfig.enableSplitter) splitter.apply(expr)
         val rewritten = currentRewriter.rewriteBv2Int(expr)
 
@@ -74,6 +82,8 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     }
 
     private fun reassertExpressions() {
+        scopes.resetAssumptions()
+
         solver.pop(currentScope + 1u)
 
         val newScope = Scopes(currentConfig)
@@ -209,6 +219,7 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
     override fun check(timeout: Duration): KSolverStatus = checkWithAssumptions(emptyList(), timeout)
 
     override fun checkWithAssumptions(assumptions: List<KExpr<KBoolSort>>, timeout: Duration): KSolverStatus {
+        scopes.resetAssumptions()
         roundCnt = 1
 
         val rewritten = assumptions.map { currentRewriter.rewriteBv2Int(it) }
@@ -220,18 +231,21 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
         } else {
             signedCheck(timeout)
         }.also {
-            scopes.resetAssumptions()
             lastCheckStatus = it
         }
     }
 
     override fun push() {
+        scopes.resetAssumptions()
+
         currentScope++
         solver.push()
         scopes.push()
     }
 
     override fun pop(n: UInt) {
+        scopes.resetAssumptions()
+
         solver.pop(n)
         scopes.pop(n)
 
@@ -402,11 +416,21 @@ open class KBv2IntSolver<Config: KSolverConfiguration>(
 
         fun resolveUnsatCore(unsatCore: List<KExpr<KBoolSort>>): List<KExpr<KBoolSort>> {
             val unsatCoreSet = unsatCore.toSet()
+            val foundPreimage = unsatCoreSet.associateWith { false }.toMutableMap()
 
             return (assumptions.zip(rewrittenAssumptions) +
                     trackedAssertions.flatten().zip(rewrittenTrackedAssertions.flatten()))
                 .mapNotNull { (expr, rewritten) ->
-                    expr.takeIf { rewritten in unsatCoreSet }
+                    if (rewritten in unsatCoreSet) {
+                        foundPreimage[rewritten] = true
+                        expr
+                    } else {
+                        null
+                    }
+                }.also {
+                    check(foundPreimage.values.all { it }) {
+                        "Unsat core resolution failure"
+                    }
                 }
         }
 
